@@ -1259,8 +1259,8 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   const ch = H - pad.top - pad.bottom;
 
   const minV = 0;
-  const maxV = Math.max(...PRIZE_DATA.map(d => d.prize_100m)) * 1.05;
-  const n = PRIZE_DATA.length;
+  const maxV = Math.max(...(window.PRIZE_DATA||[{prize_100m:1}]).map(d => d.prize_100m)) * 1.05;
+  const n = (window.PRIZE_DATA||[]).length;
 
   function xPos(i) { return pad.left + (i / (n - 1)) * cw; }
   function yPos(v) { return pad.top + ch - ((v - minV) / (maxV - minV)) * ch; }
@@ -1293,7 +1293,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   grad.addColorStop(1, accent + '00');
   ctx.beginPath();
   ctx.moveTo(xPos(0), yPos(PRIZE_DATA[0].prize_100m));
-  PRIZE_DATA.forEach((d, i) => ctx.lineTo(xPos(i), yPos(d.prize_100m)));
+  (window.PRIZE_DATA||[]).forEach((d, i) => ctx.lineTo(xPos(i), yPos(d.prize_100m)));
   ctx.lineTo(xPos(n - 1), pad.top + ch);
   ctx.lineTo(xPos(0), pad.top + ch);
   ctx.closePath();
@@ -1301,7 +1301,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   ctx.fill();
 
   // Bars (thin vertical lines from baseline to point)
-  PRIZE_DATA.forEach((d, i) => {
+  (window.PRIZE_DATA||[]).forEach((d, i) => {
     const x = xPos(i);
     const y = yPos(d.prize_100m);
     const isLast = i === n - 1;
@@ -1320,13 +1320,13 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   ctx.strokeStyle = accent;
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
-  PRIZE_DATA.forEach((d, i) => {
+  (window.PRIZE_DATA||[]).forEach((d, i) => {
     i === 0 ? ctx.moveTo(xPos(i), yPos(d.prize_100m)) : ctx.lineTo(xPos(i), yPos(d.prize_100m));
   });
   ctx.stroke();
 
   // Dots
-  PRIZE_DATA.forEach((d, i) => {
+  (window.PRIZE_DATA||[]).forEach((d, i) => {
     const isLast = i === n - 1;
     ctx.beginPath();
     ctx.arc(xPos(i), yPos(d.prize_100m), isLast ? 5 : (tooltipId ? 4 : 2.5), 0, Math.PI * 2);
@@ -1344,7 +1344,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '9px DM Mono, monospace';
     ctx.textAlign = 'center';
-    PRIZE_DATA.forEach((d, i) => {
+    (window.PRIZE_DATA||[]).forEach((d, i) => {
       if (d.year % 5 === 0 || d.year === 2021) {
         ctx.fillStyle = d.year === 2021 ? accent : 'rgba(255,255,255,0.3)';
         ctx.fillText(d.year === 2021 ? '2021*' : d.year, xPos(i), pad.top + ch + 12);
@@ -1358,7 +1358,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       let closest = 0, minDist = Infinity;
-      PRIZE_DATA.forEach((d, i) => {
+      (window.PRIZE_DATA||[]).forEach((d, i) => {
         const dist = Math.abs(xPos(i) - mx);
         if (dist < minDist) { minDist = dist; closest = i; }
       });
@@ -1571,18 +1571,7 @@ window.addEventListener('resize', () => {
 });
 
 // ── Venue bars ──
-const venueColors = ['#e8335a','#d4701a','#d4af37','#2ecc71','#3498db','#9b59b6','#1abc9c','#e74c3c','#f39c12','#95a5a6'];
-const maxVenue = DATA.venue_wins[0].wins;
-DATA.venue_wins.forEach((d, i) => {
-  const pct = (d.wins / maxVenue * 100).toFixed(1);
-  document.getElementById('venueBars').innerHTML += `
-    <div class="venue-row">
-      <div class="venue-dot" style="background:${venueColors[i]}"></div>
-      <span class="venue-name">${d.venue}</span>
-      <div class="venue-bar-track"><div class="venue-bar-fill" style="width:${pct}%;background:${venueColors[i]}"></div></div>
-      <span class="venue-val">${d.wins}</span>
-    </div>`;
-});
+// venue bars rendered by loadDashboard()
 
 // ── Results table ──
 function oddsClass(o) {
@@ -1595,7 +1584,7 @@ function oddsClass(o) {
 function buildTable() {
   const body = document.getElementById('resultsBody');
   const frag = document.createDocumentFragment();
-  DATA.recent_g1.forEach((d, i) => {
+  (window.DATA?.recent_g1||[]).forEach((d, i) => {
     const tr = document.createElement('tr');
     tr.dataset.i       = i;
     tr.dataset.surface = (d.surface || '').toLowerCase();
