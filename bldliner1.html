@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  body{margin:0;background:#0d0d12;overflow:hidden;font-family:system-ui,sans-serif;}
+  #cv{width:100%;height:600px;}
+  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;}
+  .btn{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:monospace;
+    background:rgba(15,15,22,0.92);border:1px solid rgba(255,255,255,0.12);border-radius:6px;
+    padding:5px 10px;color:rgba(255,255,255,0.45);cursor:pointer;transition:all .2s;}
+  .btn:hover{border-color:#e8335a;color:#e8335a;}
+  #tip{position:absolute;pointer-events:none;background:#1a1a26;border:1px solid rgba(255,255,255,0.1);
+    border-radius:10px;padding:10px 14px;font-size:13px;color:#f0f0f0;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6);opacity:0;transition:opacity .1s;z-index:10;max-width:200px;}
+  .hint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    font-size:10px;color:rgba(255,255,255,0.18);letter-spacing:1px;font-family:monospace;
+    pointer-events:none;white-space:nowrap;}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Radial bloodline tree</h2>
+<div id="cv"></div>
+<div class="ctrls">
+  <button class="btn" onclick="resetTree()">Reset</button>
+  <button class="btn" onclick="openLevel(1)">SS children</button>
+  <button class="btn" onclick="openLevel(2)">+grandchildren</button>
+  <button class="btn" onclick="openLevel(3)">+great-grands</button>
+</div>
+<div id="tip"></div>
+<div class="hint">Click to expand/collapse · Drag node to reposition · Scroll to zoom</div>
+<script>
+const W = document.getElementById('cv').offsetWidth, H = 600;
+const cx = W/2, cy = H/2;
+
+const FLAT = [
+  {id:"ss",pid:null,name:"Sunday Silence",g1:0, era:"Foundation sire"},
+  {id:"di",pid:"ss",name:"Deep Impact",   g1:10,era:"2005–2019"},
+  {id:"sg",pid:"ss",name:"Stay Gold",     g1:0, era:"1994–2014"},
+  {id:"hc",pid:"ss",name:"Heart's Cry",   g1:0, era:"2001–2015"},
+  {id:"sw",pid:"ss",name:"Special Week",  g1:8, era:"1995–2018"},
+  {id:"bt",pid:"ss",name:"Black Tide",    g1:0, era:"2001–2013"},
+  {id:"dm",pid:"ss",name:"Daiwa Major",   g1:4, era:"2001–2012"},
+  {id:"ne",pid:"ss",name:"Neo Universe",  g1:3, era:"2000–2010"},
+  {id:"s2",pid:"ss",name:"Silence Suzuka",g1:5, era:"1994–1998"},
+  {id:"da",pid:"ss",name:"Dance In Dark", g1:3, era:"1993–2007"},
+  {id:"at",pid:"ss",name:"Agnes Tachyon", g1:0, era:"2000–2014"},
+  {id:"ct",pid:"di",name:"Contrail",      g1:6, era:"2017–2021"},
+  {id:"ae",pid:"di",name:"Almond Eye",    g1:9, era:"2015–2021"},
+  {id:"ga",pid:"di",name:"Gran Alegria",  g1:9, era:"2016–2021"},
+  {id:"gd",pid:"di",name:"Gentildonna",   g1:8, era:"2009–2015"},
+  {id:"kz",pid:"di",name:"Kizuna",        g1:5, era:"2010–2016"},
+  {id:"fi",pid:"di",name:"Fierement",     g1:5, era:"2015–2021"},
+  {id:"sd",pid:"di",name:"Satono Diamond",g1:5, era:"2013–2018"},
+  {id:"wp",pid:"di",name:"World Premiere",g1:2, era:"2016–2021"},
+  {id:"hs",pid:"di",name:"Harp Star",     g1:2, era:"2011–2016"},
+  {id:"dk",pid:"di",name:"Danon Kingly",  g1:1, era:"2016–2021"},
+  {id:"of",pid:"sg",name:"Orfevre",       g1:9, era:"2008–2013"},
+  {id:"gs",pid:"sg",name:"Gold Ship",     g1:11,era:"2009–2016"},
+  {id:"dj",pid:"sg",name:"Dream Journey", g1:5, era:"2004–2011"},
+  {id:"ph",pid:"sg",name:"Phenomeno",     g1:5, era:"2009–2015"},
+  {id:"jw",pid:"hc",name:"Just a Way",    g1:3, era:"2010–2015"},
+  {id:"sr",pid:"hc",name:"Suave Richard", g1:3, era:"2013–2018"},
+  {id:"bv",pid:"sw",name:"Buena Vista",   g1:7, era:"2006–2011"},
+  {id:"cs",pid:"sw",name:"Cesario",       g1:1, era:"2002–2005"},
+  {id:"kb",pid:"bt",name:"Kitasan Black", g1:10,era:"2012–2018"},
+  {id:"db",pid:"da",name:"Delta Blues",   g1:2, era:"2001–2009"},
+  {id:"ds",pid:"at",name:"Daiwa Scarlet", g1:4, era:"2004–2009"},
+  {id:"ll",pid:"of",name:"Lucky Lilac",   g1:5, era:"2014–2020"},
+  {id:"eq",pid:"kb",name:"Equinox",       g1:5, era:"2019–2023"},
+  {id:"df",pid:"kz",name:"Danon Fantasy", g1:1, era:"2016–2020"}
+];
+
+const BC = {ss:"#d4af37",di:"#e8335a",sg:"#00c9a7",hc:"#9b59b6",
+  sw:"#3a7bd5",bt:"#ff7043",dm:"#ec407a",ne:"#ab47bc",
+  s2:"#26c6da",da:"#66bb6a",at:"#ffa726"};
+
+function bcolor(d){
+  if(d.id === "ss") return "#d4af37";
+  let c = d; 
+  while(c.parent && c.parent.id !== "ss") c = c.parent;
+  return BC[c.id] || "#888";
+}
+
+function nodeR(d){
+  if(d.id === "ss") return 32;
+  if(d.g1 >= 10) return 20; if(d.g1 >= 7) return 17;
+  if(d.g1 >= 4)  return 13; if(d.g1 >= 1) return 10;
+  return 7;
+}
+
+const RADII = [0, 150, 290, 420, 520];
+
+const stratify = d3.stratify().id(d => d.id).parentId(d => d.pid);
+const root = stratify(FLAT);
+
+// First pass: Cache everything fully before we start cutting things off
+root.each(d => {
+  d.name = d.data.name;
+  d.g1 = d.data.g1;
+  d.era = d.data.era;
+  d._children = d.children; 
+  d.data.ox = null;
+  d.data.oy = null;
+});
+
+// A custom loop that ignores the current visual state and hits every node
+function traverseAll(node, callback) {
+  callback(node);
+  if (node._children) {
+    node._children.forEach(c => traverseAll(c, callback));
+  }
+}
+
+// Second pass: Collapse them safely
+traverseAll(root, d => {
+  if (d.id !== "ss") d.children = null;
+});
+
+const tree = d3.tree().size([2 * Math.PI, 520]);
+
+const svg = d3.select("#cv").append("svg").attr("width",W).attr("height",H);
+let zoomT = d3.zoomIdentity; 
+const zoom = d3.zoom().scaleExtent([0.15,8]).on("zoom", e => {
+  zoomT = e.transform;
+  g.attr("transform", zoomT);
+});
+svg.call(zoom);
+const g = svg.append("g");
+
+const defs = svg.append("defs");
+const gf = defs.append("filter").attr("id","gl");
+gf.append("feGaussianBlur").attr("stdDeviation","5").attr("result","b");
+const fm = gf.append("feMerge");
+fm.append("feMergeNode").attr("in","b");
+fm.append("feMergeNode").attr("in","SourceGraphic");
+
+const LG = g.append("g"); 
+const NG = g.append("g"); 
+
+root.cartX0 = cx;
+root.cartY0 = cy;
+
+function linkPath(s, t) {
+  const mx = (s.cartX + t.cartX) / 2;
+  const my = (s.cartY + t.cartY) / 2;
+  const dx = t.cartX - s.cartX;
+  const dy = t.cartY - s.cartY;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const bow = len * 0.08;
+  return `M${s.cartX},${s.cartY}Q${mx - dy/len * bow},${my + dx/len * bow} ${t.cartX},${t.cartY}`;
+}
+
+function redrawLinksFast() {
+  LG.selectAll("path").attr("d", d => linkPath(d.source, d.target));
+}
+
+let isDragging = false;
+
+function update(source) {
+  const dur = 400;
+  tree(root);
+
+  const nodes = root.descendants();
+  const links = root.links();
+
+  nodes.forEach(d => {
+    d.y = RADII[Math.min(d.depth, RADII.length - 1)];
+    if (d.data.ox != null) {
+      d.cartX = d.data.ox;
+      d.cartY = d.data.oy;
+    } else {
+      d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2);
+      d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2);
+    }
+  });
+
+  const nd = NG.selectAll("g.nd").data(nodes, d => d.id);
+
+  const drag = d3.drag()
+    .on("start", (e, d) => {
+      isDragging = false;
+      e.sourceEvent.stopPropagation();
+    })
+    .on("drag", (e, d) => {
+      isDragging = true;
+      d.data.ox = e.x;
+      d.data.oy = e.y;
+      d.cartX = e.x;
+      d.cartY = e.y;
+      d3.select(NG.selectAll("g.nd").filter(n => n.id === d.id).node())
+        .attr("transform", `translate(${d.cartX},${d.cartY})`);
+      redrawLinksFast();
+    })
+    .on("end", (e, d) => {
+      if (!isDragging) {
+        if (d._children) {
+          d.children = d.children ? null : d._children;
+          d.data.ox = null;
+          d.data.oy = null;
+          update(d);
+        }
+      }
+    });
+
+  const enter = nd.enter().append("g").attr("class", "nd")
+    .attr("transform", d => `translate(${source.cartX0 || cx},${source.cartY0 || cy})`)
+    .call(drag)
+    .on("mouseover", (e, d) => showTip(e, d))
+    .on("mousemove", e => moveTip(e))
+    .on("mouseout", () => hideTip())
+    .attr("opacity", 0);
+
+  enter.filter(d => d.id === "ss").append("circle")
+    .attr("r", 52).attr("fill", "none").attr("stroke", "#d4af37")
+    .attr("stroke-width", 0.5).attr("opacity", 0.15).attr("filter", "url(#gl)");
+  enter.filter(d => d.id === "ss").append("circle")
+    .attr("r", 42).attr("fill", "none").attr("stroke", "#d4af37")
+    .attr("stroke-width", 0.5).attr("opacity", 0.1);
+
+  enter.append("circle")
+    .attr("r", d => nodeR(d))
+    .attr("fill", d => d.g1 > 0 || d.id === "ss" ? bcolor(d) : "transparent")
+    .attr("fill-opacity", d => d.id === "ss" ? 0.9 : d.g1 > 0 ? 0.78 : 0.15)
+    .attr("stroke", d => bcolor(d)).attr("stroke-width", d => d.id === "ss" ? 0 : 1.5)
+    .attr("stroke-opacity", 0.7)
+    .attr("filter", d => (d.id === "ss" || d.g1 >= 5) ? "url(#gl)" : null);
+
+  enter.append("text").text(d => d.name)
+    .attr("dy", d => nodeR(d) + 13).attr("text-anchor", "middle")
+    .attr("font-size", d => d.id === "ss" ? "13px" : d.g1 >= 5 ? "10px" : "9px")
+    .attr("font-weight", d => d.id === "ss" || d.g1 >= 5 ? "600" : "400")
+    .attr("fill", d => d.id === "ss" ? "#fff" : d.g1 > 0 ? bcolor(d) : "rgba(255,255,255,0.3)")
+    .attr("pointer-events", "none");
+
+  enter.filter(d => d.g1 >= 2).append("text").text(d => d.g1 + "G1")
+    .attr("dy", d => -nodeR(d) - 5).attr("text-anchor", "middle")
+    .attr("font-size", "8px").attr("font-family", "monospace").attr("font-weight", "700")
+    .attr("fill", d => bcolor(d)).attr("pointer-events", "none");
+
+  enter.filter(d => d._children).append("text")
+    .attr("class", "pm")
+    .attr("text-anchor", "middle").attr("dominant-baseline", "central")
+    .attr("font-size", "12px").attr("fill", d => bcolor(d)).attr("fill-opacity", 0.65)
+    .attr("pointer-events", "none")
+    .text(d => d.children ? "−" : "+");
+
+  const updateNodes = enter.merge(nd);
+
+  updateNodes.transition().duration(dur)
+    .attr("transform", d => `translate(${d.cartX},${d.cartY})`)
+    .attr("opacity", 1);
+
+  updateNodes.select("text.pm").text(d => d.children ? "−" : "+");
+
+  nd.exit().transition().duration(dur)
+    .attr("transform", d => `translate(${source.cartX},${source.cartY})`)
+    .attr("opacity", 0)
+    .remove();
+
+  const lk = LG.selectAll("path").data(links, d => d.source.id + "-" + d.target.id);
+
+  lk.enter().append("path")
+    .attr("fill", "none")
+    .attr("stroke", d => bcolor(d.target))
+    .attr("stroke-width", d => d.source.id === "ss" ? 2 : 1.3)
+    .attr("stroke-opacity", 0)
+    .attr("d", d => {
+      const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy };
+      return linkPath(o, o);
+    })
+    .merge(lk)
+    .transition().duration(dur)
+    .attr("stroke-opacity", d => d.source.id === "ss" ? 0.55 : 0.35)
+    .attr("d", d => linkPath(d.source, d.target));
+
+  lk.exit().transition().duration(dur)
+    .attr("stroke-opacity", 0)
+    .attr("d", d => {
+      const o = { cartX: source.cartX, cartY: source.cartY };
+      return linkPath(o, o);
+    })
+    .remove();
+
+  nodes.forEach(d => {
+    d.cartX0 = d.cartX;
+    d.cartY0 = d.cartY;
+  });
+}
+
+function showTip(e, d){
+  const c = bcolor(d);
+  document.getElementById("tip").innerHTML=
+    `<div style="font-weight:600;color:${c};font-size:14px;margin-bottom:3px">${d.name}</div>`+
+    (d.g1?`<div style="color:${c};font-size:20px;font-family:monospace;line-height:1;margin-bottom:3px">${d.g1} G1</div>`:"") +
+    `<div style="color:#6b6b80;font-size:12px">${d.era}</div>`+
+    (d._children?`<div style="color:rgba(255,255,255,0.22);font-size:11px;margin-top:4px">${d.children?"Drag or click ↑":"Drag or click ↓"} (${d._children.length})</div>`:"");
+  document.getElementById("tip").style.opacity="1";
+  moveTip(e);
+}
+
+function moveTip(e){ 
+  const t = document.getElementById("tip"); 
+  t.style.left = (e.clientX + 18) + "px"; 
+  t.style.top = (e.clientY - 10) + "px"; 
+}
+
+function hideTip(){ 
+  document.getElementById("tip").style.opacity = "0"; 
+}
+
+function resetTree(){
+  traverseAll(root, d => {
+    if(d.id !== "ss") d.children = null;
+    d.data.ox = null; d.data.oy = null;
+  });
+  update(root);
+}
+
+function openLevel(max){
+  traverseAll(root, d => {
+    if(d.depth < max && d._children) {
+      d.children = d._children;
+    } else {
+      d.children = null;
+    }
+    d.data.ox = null; d.data.oy = null;
+  });
+  update(root);
+}
+
+update(root);
+</script>
+</body>
+</html>
