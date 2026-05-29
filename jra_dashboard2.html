@@ -1236,6 +1236,13 @@ async function loadDashboard() {
     drawPrizeChart('prizeChart', null, {top:8, right:8, bottom:8, left:8});
 
     // Update year charts
+    // Assign to window so chart functions can access them
+    window.CHART_YEARS  = allYears;
+    window.TOP_HORSES   = top8Horses;
+    window.TOP_JOCKEYS  = top8Jockeys;
+    window.HORSE_YWINS  = horseYearWins;
+    window.JOCKEY_YWINS = jockeyYearWins;
+
     buildLegend('horseLegend', top8Horses, horseHidden, CHART_COLORS, drawHorseChart);
     buildLegend('jockeyLegend', top8Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
 
