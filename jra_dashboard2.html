@@ -1246,7 +1246,7 @@ async function loadDashboard() {
 
     // Build G1 table
     window.DATA = { recent_g1: g1Table };
-    window.addEventListener("DOMContentLoaded", loadDashboard);
+    buildTable();
 
     document.getElementById('countLabel').textContent = g1Table.length + ' winners (incl. 1 dead heat)';
 
