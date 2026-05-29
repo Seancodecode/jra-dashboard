@@ -1048,11 +1048,14 @@ async function sbFetch(endpoint) {
 
 // ── Loading state ──────────────────────────────────────────────────────────────
 function showLoading(msg) {
-  document.getElementById('loadingOverlay').style.display = 'flex';
-  document.getElementById('loadingMsg').textContent = msg || 'Loading...';
+  const el = document.getElementById('loadingOverlay');
+  const ml = document.getElementById('loadingMsg');
+  if (el) el.style.display = 'flex';
+  if (ml) ml.textContent = msg || 'Loading...';
 }
 function hideLoading() {
-  document.getElementById('loadingOverlay').style.display = 'none';
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'none';
 }
 
 // ── Main data loader ──────────────────────────────────────────────────────────
@@ -1222,7 +1225,7 @@ async function loadDashboard() {
 
     // Build G1 table
     window.DATA = { recent_g1: g1Table };
-    loadDashboard();
+    window.addEventListener("DOMContentLoaded", loadDashboard);
 
     document.getElementById('countLabel').textContent = g1Table.length + ' winners (incl. 1 dead heat)';
 
@@ -1650,7 +1653,7 @@ function setFilter(f, btn) {
   filterTable();
 }
 
-loadDashboard();
+window.addEventListener("DOMContentLoaded", loadDashboard);
 </script>
 
 
