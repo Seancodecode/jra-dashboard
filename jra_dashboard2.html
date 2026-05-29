@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JRA Graded Races — 1986–2021</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600&family=Playfair+Display:wght@400;600&family=Syne:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: rgba(255,255,255,0.07);
+    --g1: #d4af37;
+    --g2: #a8a9ad;
+    --g3: #cd7f32;
+    --listed: #6c8ebf;
+    --accent: #e8335a;
+    --text: #f0f0f0;
+    --muted: #6b6b80;
+    --green: #2ecc71;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a0a1a 50%, #0a0a1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 2.5rem 3rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(232,51,90,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.5rem;
+    letter-spacing: 3px;
+    line-height: 1;
+    background: linear-gradient(135deg, #fff 40%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+  }
+  .header-stats {
+    display: flex;
+    gap: 2.5rem;
+    text-align: right;
+  }
+  .hstat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    color: var(--g1);
+    line-height: 1;
+  }
+  .hstat-lbl {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── LAYOUT ── */
+  .container { max-width: 1400px; margin: 0 auto; padding: 2rem 3rem; }
+
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .card-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  /* ── STAT TILES ── */
+  .stat-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.2rem;
+    color: var(--g1);
+    line-height: 1;
+  }
+  .stat-lbl {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── BAR CHART ── */
+  .bar-list { display: flex; flex-direction: column; gap: 0.55rem; }
+  .bar-row { display: flex; align-items: center; gap: 0.8rem; }
+  .bar-name {
+    font-size: 0.8rem;
+    color: var(--text);
+    width: 170px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), #ff6b8a);
+    transition: width 0.8s ease;
+  }
+  .bar-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--g1);
+    width: 38px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ── RANK BADGE ── */
+  .rank-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 600;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+  .rank-badge.top1 { color: var(--g1); }
+  .rank-badge.top2 { color: var(--g2); }
+  .rank-badge.top3 { color: var(--g3); }
+
+  /* ── YEAR CHART ── */
+
+
+  /* ── VENUE DOTS ── */
+  .venue-grid { display: flex; flex-direction: column; gap: 0.6rem; }
+  .venue-row { display: flex; align-items: center; gap: 0.8rem; }
+  .venue-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .venue-name { font-size: 0.8rem; flex: 1; }
+  .venue-bar-track { flex: 2; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .venue-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3a7bd5, #6ab0f5); }
+  .venue-val { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--muted); width: 40px; text-align: right; }
+
+  /* ── GRADE PILLS ── */
+  .grade-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  .grade-pill {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0.8rem 1.2rem;
+    border-radius: 10px;
+    flex: 1;
+    min-width: 80px;
+  }
+  .grade-pill.g1 { background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3); }
+  .grade-pill.g2 { background: rgba(168,169,173,0.1); border: 1px solid rgba(168,169,173,0.3); }
+  .grade-pill.g3 { background: rgba(205,127,50,0.1); border: 1px solid rgba(205,127,50,0.3); }
+  .grade-pill.listed { background: rgba(108,142,191,0.1); border: 1px solid rgba(108,142,191,0.3); }
+  .grade-pill-num { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; line-height: 1; }
+  .grade-pill.g1 .grade-pill-num { color: var(--g1); }
+  .grade-pill.g2 .grade-pill-num { color: var(--g2); }
+  .grade-pill.g3 .grade-pill-num { color: var(--g3); }
+  .grade-pill.listed .grade-pill-num { color: var(--listed); }
+  .grade-pill-lbl { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 0.2rem; }
+
+  /* ── RESULTS TABLE ── */
+  .results-table { width: 100%; border-collapse: collapse; }
+  .results-table th {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.5rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-table td {
+    font-size: 0.78rem;
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .results-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .g1-tag {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(212,175,55,0.15);
+    color: var(--g1);
+    border: 1px solid rgba(212,175,55,0.3);
+  }
+  .odds-val { font-family: 'DM Mono', monospace; font-size: 0.75rem; }
+  .odds-low { color: var(--green); }
+  .odds-high { color: var(--accent); }
+  .odds-mid { color: var(--muted); }
+
+
+  .crown-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .crown-row:hover { border-color: rgba(255,255,255,0.15); }
+  .crown-row.pre-era { opacity: 0.6; }
+  .crown-row.post-era { opacity: 0.75; }
+  .crown-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    color: var(--g1);
+    width: 28px;
+    flex-shrink: 0;
+    text-align: center;
+  }
+  .crown-info { flex: 1; min-width: 0; }
+  .crown-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .crown-year {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+  }
+  .horse-link {
+    color: #fff;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(212,175,55,0.4);
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .horse-link:hover { color: var(--g1); border-color: var(--g1); }
+  .crown-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    padding: 2px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .crown-badge.in { background: rgba(46,204,113,0.12); color: #2ecc71; border: 1px solid rgba(46,204,113,0.25); }
+  .crown-badge.pre { background: rgba(107,107,128,0.15); color: var(--muted); border: 1px solid var(--border); }
+  .crown-badge.post { background: rgba(108,142,191,0.12); color: var(--listed); border: 1px solid rgba(108,142,191,0.25); }
+
+
+  /* ── SETTINGS PANEL ── */
+  .settings-toggle {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    z-index: 1000;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .settings-toggle:hover {
+    border-color: var(--accent);
+    transform: scale(1.1);
+  }
+  .settings-panel {
+    position: fixed;
+    bottom: 5.5rem;
+    right: 2rem;
+    width: 260px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.2rem;
+    z-index: 999;
+    display: none;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    animation: slideUp 0.2s ease;
+  }
+  .settings-panel.open { display: block; }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .settings-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+  .settings-group { margin-bottom: 1rem; }
+  .settings-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  /* Color wheel */
+  .color-wheel-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .color-wheel {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    background: none;
+    padding: 0;
+  }
+  .color-wheel::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; }
+  .color-wheel::-webkit-color-swatch { border-radius: 50%; border: none; }
+  .color-hex {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    width: 90px;
+    outline: none;
+  }
+  /* Color presets */
+  .color-presets {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .preset-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .preset-dot:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.4); }
+  /* Font pills */
+  .font-pills {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .font-pill {
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+  }
+  .font-pill:hover { border-color: rgba(255,255,255,0.2); }
+  .font-pill.active { border-color: var(--accent); background: rgba(232,51,90,0.08); }
+  .font-pill-name {
+    font-size: 0.8rem;
+    color: var(--text);
+    display: block;
+  }
+  .font-pill-sample {
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 1px;
+    display: block;
+  }
+  /* Dark / Light toggle */
+  .theme-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .toggle-switch {
+    width: 40px;
+    height: 22px;
+    background: var(--surface2);
+    border-radius: 11px;
+    border: 1px solid var(--border);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-switch.on { background: var(--accent); }
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+  }
+  .toggle-switch.on .toggle-knob { transform: translateX(18px); }
+  .settings-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.8rem 0;
+  }
+
+
+  /* ── TABS ── */
+  .tab-bar {
+    display: flex;
+    gap: 0.3rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .tab-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 0.5rem 0.9rem;
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── LINE CHART ── */
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--text);
+    cursor: pointer;
+    opacity: 1;
+    transition: opacity 0.2s;
+  }
+  .legend-item.muted { opacity: 0.3; }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .chart-tooltip {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    min-height: 1.2em;
+    margin-top: 0.5rem;
+    text-align: center;
+  }
+
+
+  .race-link {
+    color: var(--text);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .race-link:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── SEARCH ── */
+  .search-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    align-items: center;
+  }
+  .search-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    flex: 1;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--muted); }
+  .filter-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .section-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 1rem;
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .scroll-table { overflow-y: auto; max-height: 420px; }
+  .scroll-table::-webkit-scrollbar { width: 4px; }
+  .scroll-table::-webkit-scrollbar-track { background: transparent; }
+  .scroll-table::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .winner-horse { font-weight: 500; color: #fff; }
+  .jockey-name { color: #9db8d4; }
+  .venue-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .dist-val { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--muted); }
+
+  .no-results { text-align: center; color: var(--muted); padding: 2rem; font-size: 0.85rem; }
+
+
+  body.light {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface2: #f0ede8;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a2e;
+    --muted: #888899;
+  }
+  body.light header {
+    background: linear-gradient(135deg, #f5f4f0 0%, #ede8f5 50%, #f0f4f5 100%);
+  }
+
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: repeat(2,1fr); }
+    .grid-3 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    header { flex-direction: column; gap: 1.5rem; align-items: flex-start; }
+    .container { padding: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="header-title">JRA GRADED RACES</div>
+    <div class="header-sub">Japan Racing Association · 1986–2021 · Historical Database</div>
+    <div style="margin-top:0.4rem">
+      <a href="https://www.kaggle.com/datasets/takamotoki/jra-horse-racing-dataset" target="_blank"
+         style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);text-decoration:none;
+                border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:1px;transition:color 0.2s;"
+         onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+        📦 Dataset by takamotoki on Kaggle
+      </a>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div>
+      <div class="hstat-val">4,250</div>
+      <div class="hstat-lbl">Total Races</div>
+    </div>
+    <div>
+      <div class="hstat-val">14,939</div>
+      <div class="hstat-lbl">Horses</div>
+    </div>
+    <div>
+      <div class="hstat-val">802</div>
+      <div class="hstat-lbl">Jockeys</div>
+    </div>
+    <div>
+      <div class="hstat-val">35</div>
+      <div class="hstat-lbl">Years</div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Grade breakdown -->
+  <div class="section-label">Overview</div>
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-title">Races by Grade</div>
+    <div class="grade-row">
+      <div class="grade-pill g1"><div class="grade-pill-num">715</div><div class="grade-pill-lbl">G1</div></div>
+      <div class="grade-pill g2"><div class="grade-pill-num">1,159</div><div class="grade-pill-lbl">G2</div></div>
+      <div class="grade-pill g3"><div class="grade-pill-num">2,238</div><div class="grade-pill-lbl">G3</div></div>
+      <div class="grade-pill listed"><div class="grade-pill-num">138</div><div class="grade-pill-lbl">Listed</div></div>
+    </div>
+    <div style="margin-top:1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem">
+        <div class="card-title" style="margin-bottom:0">
+          Total Winning Prize Pool by Year
+          <span style="color:var(--muted);font-size:0.6rem">(¥Billion JPY · graded race winners)</span>
+        </div>
+        <button onclick="togglePrizeExpand()" id="expandBtn"
+          style="font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;
+                 background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                 color:var(--muted);padding:3px 10px;cursor:pointer;transition:all 0.2s;"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+          Expand ↗
+        </button>
+      </div>
+      <canvas id="prizeChart" style="width:100%;height:90px;display:block;cursor:crosshair"></canvas>
+      <div style="display:flex;justify-content:space-between;margin-top:3px">
+        <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted)">1986</span>
+        <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--accent)">2021 *</span>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted);margin-top:2px">
+        * Dataset ends July 2021 — partial year
+      </div>
+    </div>
+
+    <!-- Expanded modal -->
+    <div id="prizeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);
+         z-index:2000;align-items:center;justify-content:center;padding:2rem">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+                  padding:2rem;width:100%;max-width:900px;position:relative">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+          <div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:2px">
+              Prize Pool — Graded Race Winners
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);margin-top:0.2rem">
+              Total prize money distributed to winners of graded races · ¥100M JPY · 1986–2021*
+            </div>
+          </div>
+          <button onclick="togglePrizeExpand()"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+                   color:var(--muted);font-size:1.2rem;width:36px;height:36px;cursor:pointer;
+                   display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+        <canvas id="prizeChartLarge" style="width:100%;height:300px;display:block;cursor:crosshair"></canvas>
+        <div style="display:flex;justify-content:space-between;margin-top:6px">
+          <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--muted)">1986</span>
+          <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--accent)">2021 *</span>
+        </div>
+        <div id="prizeTooltip" style="font-family:'DM Mono',monospace;font-size:0.7rem;
+             color:var(--muted);margin-top:0.8rem;min-height:1.2em;text-align:center"></div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.55rem;color:var(--muted);margin-top:0.5rem">
+          * Dataset ends July 2021 — partial year figure
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top leaderboards with tabs -->
+  <div class="section-label">All-Time Leaders</div>
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('wins',this)">Wins — Jockeys</button>
+      <button class="tab-btn" onclick="switchTab('wins-h',this)">Wins — Horses</button>
+      <button class="tab-btn" onclick="switchTab('wins-t',this)">Wins — Trainers</button>
+      <button class="tab-btn" onclick="switchTab('earn-h',this)">Earnings — Horses</button>
+      <button class="tab-btn" onclick="switchTab('earn-j',this)">Earnings — Jockeys</button>
+      <button class="tab-btn" onclick="switchTab('chart-h',this)">Horse Wins by Year</button>
+      <button class="tab-btn" onclick="switchTab('chart-j',this)">Jockey Wins by Year</button>
+    </div>
+
+    <div class="tab-pane active" id="tab-wins">
+      <div class="bar-list" id="jockeyBars"></div>
+    </div>
+    <div class="tab-pane" id="tab-wins-h">
+      <div class="bar-list" id="horseBars"></div>
+    </div>
+    <div class="tab-pane" id="tab-wins-t">
+      <div class="bar-list" id="trainerBars"></div>
+    </div>
+
+    <div class="tab-pane" id="tab-earn-h">
+      <div class="card-title" style="margin-bottom:0.8rem">Top Earning Horses — Graded Races Only <span style="color:var(--muted);font-size:0.6rem">(¥100M JPY · all prize money incl. placings)</span></div>
+      <div class="bar-list" id="horseEarnBars"></div>
+    </div>
+    <div class="tab-pane" id="tab-earn-j">
+      <div class="card-title" style="margin-bottom:0.8rem">Top Earning Jockeys — Graded Races Only <span style="color:var(--muted);font-size:0.6rem">(¥100M JPY · all prize money incl. placings)</span></div>
+      <div class="bar-list" id="jockeyEarnBars"></div>
+    </div>
+
+    <div class="tab-pane" id="tab-chart-h">
+      <div class="card-title" style="margin-bottom:0.8rem">Graded Wins by Year — Top 8 Horses</div>
+      <div class="chart-legend" id="horseLegend"></div>
+      <canvas id="horseYearChart" style="width:100%;height:220px;display:block;cursor:crosshair"></canvas>
+      <div class="chart-tooltip" id="horseChartTip"></div>
+    </div>
+    <div class="tab-pane" id="tab-chart-j">
+      <div class="card-title" style="margin-bottom:0.8rem">Graded Wins by Year — Top 8 Jockeys</div>
+      <div class="chart-legend" id="jockeyLegend"></div>
+      <canvas id="jockeyYearChart" style="width:100%;height:220px;display:block;cursor:crosshair"></canvas>
+      <div class="chart-tooltip" id="jockeyChartTip"></div>
+    </div>
+  </div>
+
+  <!-- Venue breakdown -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Wins by Venue</div>
+      <div class="venue-grid" id="venueBars"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Quick Facts</div>
+      <div style="display:flex;flex-direction:column;gap:1rem;margin-top:0.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.8rem;color:var(--muted)">Most successful jockey</span>
+          <span style="font-weight:600;color:var(--g1)">Take Yutaka (344 wins)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.8rem;color:var(--muted)">Most successful trainer</span>
+          <span style="font-weight:600;color:var(--g1)">Fujisawa Kazuo (125 wins)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.8rem;color:var(--muted)">Most graded wins (horse)</span>
+          <span style="font-weight:600;color:var(--g1)">Oguri Cap / TM Opera O (12)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.8rem;color:var(--muted)">Top foreign jockey</span>
+          <span style="font-weight:600;color:var(--g1)">Lemaire C. (115 wins)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.8rem;color:var(--muted)">Busiest venue</span>
+          <span style="font-weight:600;color:var(--g1)">Tokyo (922 wins)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:0.8rem;color:var(--muted)">Dataset span</span>
+          <span style="font-weight:600;color:var(--g1)">1986-01-05 → 2021-07-25</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Triple Crown & Tiara -->
+  <div class="section-label">Legends of the Classics</div>
+  <div class="grid-2" style="margin-bottom:1.5rem">
+
+    <!-- Triple Crown -->
+    <div class="card">
+      <div class="card-title">🏆 Triple Crown Winners — Satsuki Sho · Japanese Derby · Kikka Sho</div>
+      <div style="display:flex;flex-direction:column;gap:0.6rem;margin-top:0.5rem">
+
+        <div class="crown-row pre-era">
+          <div class="crown-num">1st</div>
+          <div class="crown-info">
+            <div class="crown-name">St Lite</div>
+            <div class="crown-year">1941 · Pre-database era</div>
+          </div>
+          <div class="crown-badge pre">Historic</div>
+        </div>
+
+        <div class="crown-row pre-era">
+          <div class="crown-num">2nd</div>
+          <div class="crown-info">
+            <div class="crown-name">Shinzan</div>
+            <div class="crown-year">1964 · Pre-database era</div>
+          </div>
+          <div class="crown-badge pre">Historic</div>
+        </div>
+
+        <div class="crown-row pre-era">
+          <div class="crown-num">3rd</div>
+          <div class="crown-info">
+            <div class="crown-name">Mr. C.B.</div>
+            <div class="crown-year">1983 · Pre-graded era</div>
+          </div>
+          <div class="crown-badge pre">Historic</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">4th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/1981107017/" target="_blank" class="horse-link">Symboli Rudolf</a></div>
+            <div class="crown-year">1984 · "The Emperor" · First unbeaten TC winner</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">5th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/1991108889/" target="_blank" class="horse-link">Narita Brian</a></div>
+            <div class="crown-year">1994 · "Shadow Roll Monster" · 9 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">6th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2002100816/" target="_blank" class="horse-link">Deep Impact</a></div>
+            <div class="crown-year">2005 · "Pegasus" · 10 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">7th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2008102636/" target="_blank" class="horse-link">Orfevre</a></div>
+            <div class="crown-year">2011 · 2× Arc runner-up · 9 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">8th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2017101835/" target="_blank" class="horse-link">Contrail</a></div>
+            <div class="crown-year">2020 · Unbeaten TC · Son of Deep Impact · 6 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Triple Tiara -->
+    <div class="card">
+      <div class="card-title">👑 Triple Tiara Winners — Oka Sho · Japanese Oaks · Shuka Sho</div>
+      <div style="display:flex;flex-direction:column;gap:0.6rem;margin-top:0.5rem">
+
+        <div class="crown-row">
+          <div class="crown-num">1st</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/1983103914/" target="_blank" class="horse-link">Mejiro Ramonu</a></div>
+            <div class="crown-year">1986 · First ever Triple Tiara · 6 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">2nd</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2000106022/" target="_blank" class="horse-link">Still in Love</a></div>
+            <div class="crown-year">2003 · 3 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">3rd</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2007103234/" target="_blank" class="horse-link">Apapane</a></div>
+            <div class="crown-year">2010 · First G1 dead heat in history · 5 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">4th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2009106253/" target="_blank" class="horse-link">Gentildonna</a></div>
+            <div class="crown-year">2012 · 2× Japan Cup · 2× Horse of the Year · 8 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">5th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2015104961/" target="_blank" class="horse-link">Almond Eye</a></div>
+            <div class="crown-year">2018 · 2× Horse of the Year · World #1 2020 · 9 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row">
+          <div class="crown-num">6th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2017100720/" target="_blank" class="horse-link">Daring Tact</a></div>
+            <div class="crown-year">2020 · Unbeaten Triple Tiara · 3 graded wins</div>
+          </div>
+          <div class="crown-badge in">In Dataset</div>
+        </div>
+
+        <div class="crown-row post-era">
+          <div class="crown-num">7th</div>
+          <div class="crown-info">
+            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2020103656/" target="_blank" class="horse-link">Liberty Island</a></div>
+            <div class="crown-year">2023 · Post-dataset · Died April 2025</div>
+          </div>
+          <div class="crown-badge post">Post-2021</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Recent G1 Results -->
+  <div class="section-label">G1 Results</div>
+  <div class="card">
+    <div class="search-bar">
+      <span id="countLabel" style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted);white-space:nowrap">716 winners (incl. 1 dead heat)</span>
+      <input class="search-input" id="searchInput" placeholder="Search race, horse, jockey..." oninput="filterTableDebounced()">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('turf',this)">Turf</button>
+      <button class="filter-btn" onclick="setFilter('dirt',this)">Dirt</button>
+      <button class="filter-btn" onclick="setFilter('sprint',this)">Sprint ≤1400</button>
+      <button class="filter-btn" onclick="setFilter('mile',this)">Mile 1401–1800</button>
+      <button class="filter-btn" onclick="setFilter('inter',this)">Intermediate 1801–2100</button>
+      <button class="filter-btn" onclick="setFilter('long',this)">Long 2101+</button>
+    </div>
+    <div class="scroll-table">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Race</th>
+            <th>Winner</th>
+            <th>Jockey</th>
+            <th>Trainer</th>
+            <th>Venue</th>
+            <th>Dist</th>
+            <th>Odds</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+    <div id="noResults" class="no-results" style="display:none">No results found</div>
+  </div>
+
+</div>
+
+<script>
+
+const SUPABASE_URL = 'https://mfmarygiuwqkzgjtxzjt.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbWFyeWdpdXdxa3pnanR4emp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDE1MDgsImV4cCI6MjA5NTYxNzUwOH0.ME7XrirDYn0QuAe0aWR9kvigHqXFYRv4tu9UzTFeHDo';
+
+async function sbFetch(endpoint) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + endpoint, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+  });
+  return res.json();
+}
+
+// ── Loading state ──────────────────────────────────────────────────────────────
+function showLoading(msg) {
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('loadingMsg').textContent = msg || 'Loading...';
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// ── Main data loader ──────────────────────────────────────────────────────────
+async function loadDashboard() {
+  showLoading('Connecting to database...');
+
+  try {
+    // ── Stats ──────────────────────────────────────────────────────────────────
+    showLoading('Loading overview stats...');
+    const [totalRaces, totalHorses, totalJockeys] = await Promise.all([
+      sbFetch('races?select=race_id&grade=eq.G1').then(d => {
+        const unique = new Set(d.map(r => r.race_id));
+        return unique.size;
+      }),
+      sbFetch('races?select=horse_name').then(d => new Set(d.map(r => r.horse_name)).size),
+      sbFetch('races?select=jockey_name').then(d => new Set(d.map(r => r.jockey_name)).size),
+    ]);
+
+    // ── Grade counts ──────────────────────────────────────────────────────────
+    showLoading('Loading race data...');
+    const allRaces = await sbFetch('races?select=race_id,grade,race_date,prize_10k_jpy,rank,horse_name,jockey_name,trainer_name,venue,distance_m,win_odds,surface,race_name&limit=100000');
+
+    // Process data client-side
+    const winners = allRaces.filter(r => r.rank === 1);
+    const g1Winners = winners.filter(r => r.grade === 'G1');
+
+    // Grade breakdown
+    const gradeCounts = {};
+    const uniqueRaces = new Map();
+    allRaces.forEach(r => {
+      if (!uniqueRaces.has(r.race_id)) {
+        uniqueRaces.set(r.race_id, r.grade);
+        gradeCounts[r.grade] = (gradeCounts[r.grade] || 0) + 1;
+      }
+    });
+
+    // Top jockeys by wins
+    const jockeyWins = {};
+    winners.forEach(r => { jockeyWins[r.jockey_name] = (jockeyWins[r.jockey_name] || 0) + 1; });
+    const topJockeys = Object.entries(jockeyWins).sort((a,b) => b[1]-a[1]).slice(0,15)
+      .map(([name,wins]) => ({name,wins}));
+
+    // Top horses by wins
+    const horseWins = {};
+    winners.forEach(r => { horseWins[r.horse_name] = (horseWins[r.horse_name] || 0) + 1; });
+    const topHorses = Object.entries(horseWins).sort((a,b) => b[1]-a[1]).slice(0,15)
+      .map(([name,wins]) => ({name,wins}));
+
+    // Top trainers by wins
+    const trainerWins = {};
+    winners.forEach(r => { trainerWins[r.trainer_name] = (trainerWins[r.trainer_name] || 0) + 1; });
+    const topTrainers = Object.entries(trainerWins).sort((a,b) => b[1]-a[1]).slice(0,15)
+      .map(([name,wins]) => ({name,wins}));
+
+    // Earnings
+    const horseEarn = {};
+    allRaces.forEach(r => { if(r.prize_10k_jpy) horseEarn[r.horse_name] = (horseEarn[r.horse_name]||0) + r.prize_10k_jpy; });
+    const topHorseEarn = Object.entries(horseEarn).sort((a,b) => b[1]-a[1]).slice(0,20)
+      .map(([name,p]) => ({name, prize_100m: +(p/100000).toFixed(3)}));
+
+    const jockeyEarn = {};
+    allRaces.forEach(r => { if(r.prize_10k_jpy) jockeyEarn[r.jockey_name] = (jockeyEarn[r.jockey_name]||0) + r.prize_10k_jpy; });
+    const topJockeyEarn = Object.entries(jockeyEarn).sort((a,b) => b[1]-a[1]).slice(0,20)
+      .map(([name,p]) => ({name, prize_100m: +(p/100000).toFixed(3)}));
+
+    // Prize pool by year
+    const yearPrize = {};
+    winners.forEach(r => {
+      const yr = r.race_date?.slice(0,4);
+      if(yr) yearPrize[yr] = (yearPrize[yr]||0) + (r.prize_10k_jpy||0);
+    });
+
+    // Year wins for charts (top 8 horses and jockeys)
+    const top8Horses = topHorses.slice(0,8).map(h => h.name);
+    const top8Jockeys = topJockeys.slice(0,8).map(j => j.name);
+    const allYears = [...new Set(allRaces.map(r => +r.race_date?.slice(0,4)))].filter(Boolean).sort();
+
+    const horseYearWins = {};
+    top8Horses.forEach(h => {
+      horseYearWins[h] = {};
+      allYears.forEach(y => horseYearWins[h][y] = 0);
+    });
+    winners.forEach(r => {
+      const yr = +r.race_date?.slice(0,4);
+      if(horseYearWins[r.horse_name]) horseYearWins[r.horse_name][yr]++;
+    });
+
+    const jockeyYearWins = {};
+    top8Jockeys.forEach(j => {
+      jockeyYearWins[j] = {};
+      allYears.forEach(y => jockeyYearWins[j][y] = 0);
+    });
+    winners.forEach(r => {
+      const yr = +r.race_date?.slice(0,4);
+      if(jockeyYearWins[r.jockey_name]) jockeyYearWins[r.jockey_name][yr]++;
+    });
+
+    // G1 winners for table
+    const g1Table = g1Winners.sort((a,b) => b.race_date?.localeCompare(a.race_date))
+      .map(r => ({
+        race_date: r.race_date,
+        race_name: r.race_name,
+        horse_name: r.horse_name,
+        jockey_name: r.jockey_name,
+        trainer_name: r.trainer_name,
+        venue: r.venue,
+        distance_m: r.distance_m,
+        win_odds: r.win_odds,
+        surface: r.surface,
+        race_id: r.race_id,
+      }));
+
+    // Venue wins
+    const venueWins = {};
+    winners.forEach(r => { venueWins[r.venue] = (venueWins[r.venue]||0) + 1; });
+    const venueData = Object.entries(venueWins).sort((a,b) => b[1]-a[1])
+      .map(([venue,wins]) => ({venue,wins}));
+
+    // ── Update header stats ───────────────────────────────────────────────────
+    document.querySelector('.hstat-val:nth-child(1)').textContent = uniqueRaces.size.toLocaleString();
+
+    // ── Update grade pills ────────────────────────────────────────────────────
+    const gradePills = document.querySelectorAll('.grade-pill-num');
+    gradePills[0].textContent = (gradeCounts['G1']||0).toLocaleString();
+    gradePills[1].textContent = (gradeCounts['G2']||0).toLocaleString();
+    gradePills[2].textContent = (gradeCounts['G3']||0).toLocaleString();
+    gradePills[3].textContent = (gradeCounts['Listed']||0).toLocaleString();
+
+    // ── Render all components ─────────────────────────────────────────────────
+    showLoading('Rendering dashboard...');
+
+    if(topJockeys.length) renderBars('jockeyBars', topJockeys, topJockeys[0].wins);
+    if(topHorses.length) renderBars('horseBars', topHorses, topHorses[0].wins);
+    if(topTrainers.length) renderBars('trainerBars', topTrainers, topTrainers[0].wins);
+    if(topHorseEarn.length) renderEarnBars('horseEarnBars', topHorseEarn);
+    if(topJockeyEarn.length) renderEarnBars('jockeyEarnBars', topJockeyEarn);
+
+    // Update venue bars
+    const venueEl = document.getElementById('venueBars');
+    venueEl.innerHTML = '';
+    const venueColors = ['#e8335a','#d4af37','#00c9a7','#7c5cbf','#3a7bd5','#ff6b35','#2ecc71','#e74c3c','#f39c12','#95a5a6'];
+    const maxVenue = venueData[0]?.wins || 1;
+    venueData.forEach((d,i) => {
+      const pct = (d.wins/maxVenue*100).toFixed(1);
+      venueEl.innerHTML += `<div class="venue-row">
+        <div class="venue-dot" style="background:${venueColors[i]}"></div>
+        <span class="venue-name">${d.venue}</span>
+        <div class="venue-bar-track"><div class="venue-bar-fill" style="width:${pct}%;background:${venueColors[i]}"></div></div>
+        <span class="venue-val">${d.wins}</span>
+      </div>`;
+    });
+
+    // Update prize chart data
+    window.PRIZE_DATA = Object.entries(yearPrize)
+      .sort((a,b) => a[0]-b[0])
+      .map(([year,prize]) => ({year:+year, prize_100m: +(prize/10000).toFixed(1)}));
+    drawPrizeChart('prizeChart', null, {top:8, right:8, bottom:8, left:8});
+
+    // Update year charts
+    window.CHART_YEARS = allYears;
+    window.TOP_HORSES = top8Horses;
+    window.TOP_JOCKEYS = top8Jockeys;
+    window.HORSE_YWINS = horseYearWins;
+    window.JOCKEY_YWINS = jockeyYearWins;
+    buildLegend('horseLegend', top8Horses, horseHidden, CHART_COLORS, drawHorseChart);
+    buildLegend('jockeyLegend', top8Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
+
+    // Build G1 table
+    window.DATA = { recent_g1: g1Table };
+    loadDashboard();
+
+    document.getElementById('countLabel').textContent = g1Table.length + ' winners (incl. 1 dead heat)';
+
+    hideLoading();
+
+  } catch(err) {
+    document.getElementById('loadingMsg').textContent = 'Error loading data: ' + err.message;
+    console.error(err);
+  }
+}
+
+// Stub DATA object so existing code doesn't break before load
+const DATA = { recent_g1: [] };
+
+
+let activeFilter = 'all';
+
+// ── Prize pool line-bar chart ──────────────────────────────────────────────────
+window.PRIZE_DATA = [{"year":1986,"prize_100m":36.3},{"year":1987,"prize_100m":40.7},{"year":1988,"prize_100m":44.3},{"year":1989,"prize_100m":47.9},{"year":1990,"prize_100m":51.6},{"year":1991,"prize_100m":55.9},{"year":1992,"prize_100m":59.3},{"year":1993,"prize_100m":59.3},{"year":1994,"prize_100m":62.7},{"year":1995,"prize_100m":64.8},{"year":1996,"prize_100m":69.4},{"year":1997,"prize_100m":71.5},{"year":1998,"prize_100m":72.0},{"year":1999,"prize_100m":68.9},{"year":2000,"prize_100m":71.1},{"year":2001,"prize_100m":72.0},{"year":2002,"prize_100m":72.2},{"year":2003,"prize_100m":72.1},{"year":2004,"prize_100m":72.0},{"year":2005,"prize_100m":71.0},{"year":2006,"prize_100m":73.1},{"year":2007,"prize_100m":73.4},{"year":2008,"prize_100m":73.2},{"year":2009,"prize_100m":73.6},{"year":2010,"prize_100m":73.9},{"year":2011,"prize_100m":74.3},{"year":2012,"prize_100m":71.5},{"year":2013,"prize_100m":71.9},{"year":2014,"prize_100m":72.9},{"year":2015,"prize_100m":74.6},{"year":2016,"prize_100m":77.5},{"year":2017,"prize_100m":78.1},{"year":2018,"prize_100m":81.6},{"year":2019,"prize_100m":79.9},{"year":2020,"prize_100m":81.0},{"year":2021,"prize_100m":44.9}];
+
+function drawPrizeChart(canvasId, tooltipId, padding) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = padding || { top: 10, right: 20, bottom: 10, left: 40 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  const minV = 0;
+  const maxV = Math.max(...PRIZE_DATA.map(d => d.prize_100m)) * 1.05;
+  const n = PRIZE_DATA.length;
+
+  function xPos(i) { return pad.left + (i / (n - 1)) * cw; }
+  function yPos(v) { return pad.top + ch - ((v - minV) / (maxV - minV)) * ch; }
+
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e8335a';
+  const mutedColor = 'rgba(255,255,255,0.08)';
+  const textColor = 'rgba(255,255,255,0.25)';
+
+  // Grid lines
+  ctx.strokeStyle = mutedColor;
+  ctx.lineWidth = 1;
+  [20, 40, 60, 80].forEach(v => {
+    if (v > maxV) return;
+    const y = yPos(v);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + cw, y);
+    ctx.stroke();
+    if (tooltipId) { // only label on large chart
+      ctx.fillStyle = textColor;
+      ctx.font = '9px DM Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('¥' + (v/10).toFixed(0) + 'B', pad.left - 4, y + 3);
+    }
+  });
+
+  // Fill area
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  grad.addColorStop(0, accent + '44');
+  grad.addColorStop(1, accent + '00');
+  ctx.beginPath();
+  ctx.moveTo(xPos(0), yPos(PRIZE_DATA[0].prize_100m));
+  PRIZE_DATA.forEach((d, i) => ctx.lineTo(xPos(i), yPos(d.prize_100m)));
+  ctx.lineTo(xPos(n - 1), pad.top + ch);
+  ctx.lineTo(xPos(0), pad.top + ch);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Bars (thin vertical lines from baseline to point)
+  PRIZE_DATA.forEach((d, i) => {
+    const x = xPos(i);
+    const y = yPos(d.prize_100m);
+    const isLast = i === n - 1;
+    ctx.strokeStyle = isLast ? accent + '88' : accent + '33';
+    ctx.lineWidth = isLast ? 2 : 1;
+    ctx.setLineDash(isLast ? [3, 2] : []);
+    ctx.beginPath();
+    ctx.moveTo(x, pad.top + ch);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  PRIZE_DATA.forEach((d, i) => {
+    i === 0 ? ctx.moveTo(xPos(i), yPos(d.prize_100m)) : ctx.lineTo(xPos(i), yPos(d.prize_100m));
+  });
+  ctx.stroke();
+
+  // Dots
+  PRIZE_DATA.forEach((d, i) => {
+    const isLast = i === n - 1;
+    ctx.beginPath();
+    ctx.arc(xPos(i), yPos(d.prize_100m), isLast ? 5 : (tooltipId ? 4 : 2.5), 0, Math.PI * 2);
+    ctx.fillStyle = isLast ? accent : (tooltipId ? accent : '#fff');
+    ctx.fill();
+    if (isLast) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  });
+
+  // Year labels (large chart only)
+  if (tooltipId) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '9px DM Mono, monospace';
+    ctx.textAlign = 'center';
+    PRIZE_DATA.forEach((d, i) => {
+      if (d.year % 5 === 0 || d.year === 2021) {
+        ctx.fillStyle = d.year === 2021 ? accent : 'rgba(255,255,255,0.3)';
+        ctx.fillText(d.year === 2021 ? '2021*' : d.year, xPos(i), pad.top + ch + 12);
+      }
+    });
+  }
+
+  // Hover interaction (large chart only)
+  if (tooltipId) {
+    canvas.onmousemove = function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      let closest = 0, minDist = Infinity;
+      PRIZE_DATA.forEach((d, i) => {
+        const dist = Math.abs(xPos(i) - mx);
+        if (dist < minDist) { minDist = dist; closest = i; }
+      });
+      const d = PRIZE_DATA[closest];
+      const tip = document.getElementById(tooltipId);
+      if (tip) tip.textContent = d.year + (d.year === 2021 ? '*' : '') + '  —  ¥' + d.prize_100m + 'B JPY' + (d.year === 2021 ? '  (partial year, data ends July 2021)' : '');
+      // Redraw with highlight
+      drawPrizeChart(canvasId, null, padding);
+      ctx.scale(dpr, dpr);
+      ctx.beginPath();
+      ctx.arc(xPos(closest), yPos(d.prize_100m), 6, 0, Math.PI * 2);
+      ctx.fillStyle = accent;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    };
+    canvas.onmouseleave = function() {
+      const tip = document.getElementById(tooltipId);
+      if (tip) tip.textContent = '';
+      drawPrizeChart(canvasId, null, padding);
+    };
+  }
+}
+
+function togglePrizeExpand() {
+  const modal = document.getElementById('prizeModal');
+  const isOpen = modal.style.display === 'flex';
+  modal.style.display = isOpen ? 'none' : 'flex';
+  document.getElementById('expandBtn').textContent = isOpen ? 'Expand ↗' : 'Close ↙';
+  if (!isOpen) {
+    setTimeout(() => drawPrizeChart('prizeChartLarge', 'prizeTooltip', {top:20, right:20, bottom:20, left:50}), 50);
+  }
+}
+
+// Draw small chart on load
+window.addEventListener('load', () => {
+  drawPrizeChart('prizeChart', null, {top:8, right:8, bottom:8, left:8});
+});
+window.addEventListener('resize', () => {
+  drawPrizeChart('prizeChart', null, {top:8, right:8, bottom:8, left:8});
+});
+
+// ── Bar lists ──
+function renderBars(containerId, data, maxVal) {
+  const el = document.getElementById(containerId);
+  data.forEach((d, i) => {
+    const pct = (d.wins / maxVal * 100).toFixed(1);
+    const rankClass = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+    el.innerHTML += `
+      <div class="bar-row">
+        <span class="rank-badge ${rankClass}">${i+1}</span>
+        <span class="bar-name" title="${d.name}">${d.name}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <span class="bar-val">${d.wins}</span>
+      </div>`;
+  });
+}
+// rendered by loadDashboard()
+
+// ── Earnings bars ──────────────────────────────────────────────────────────────
+const HORSE_EARN = [{"name": "Kitasan Black", "prize_100m": 1.864}, {"name": "T M Opera O", "prize_100m": 1.817}, {"name": "Almond Eye", "prize_100m": 1.512}, {"name": "Deep Impact", "prize_100m": 1.428}, {"name": "Buena Vista", "prize_100m": 1.38}, {"name": "Gold Ship", "prize_100m": 1.375}, {"name": "Orfevre", "prize_100m": 1.331}, {"name": "Gentildonna", "prize_100m": 1.318}, {"name": "Vodka", "prize_100m": 1.275}, {"name": "Zenno Rob Roy", "prize_100m": 1.094}, {"name": "Special Week", "prize_100m": 1.082}, {"name": "Meisho Samson", "prize_100m": 1.022}, {"name": "Chrono Genesis", "prize_100m": 1.003}, {"name": "Daiwa Major", "prize_100m": 0.993}, {"name": "Narita Top Road", "prize_100m": 0.979}, {"name": "Tap Dance City", "prize_100m": 0.966}, {"name": "Symboli Cris S", "prize_100m": 0.96}, {"name": "Mejiro McQueen", "prize_100m": 0.956}, {"name": "Cheval Grand", "prize_100m": 0.951}, {"name": "Narita Brian", "prize_100m": 0.915}];
+const JOCKEY_EARN = [{"name": "Take Yutaka", "prize_100m": 33.792}, {"name": "Yokoyama Norihiro", "prize_100m": 19.206}, {"name": "Fukunaga Yuichi", "prize_100m": 17.47}, {"name": "Ebina Seigi", "prize_100m": 14.55}, {"name": "Lemaire C.", "prize_100m": 13.545}, {"name": "Iwata Yasunari", "prize_100m": 12.011}, {"name": "Okabe Yukio", "prize_100m": 11.43}, {"name": "Ikezoe Kenichi", "prize_100m": 11.063}, {"name": "Kawada Yoshimasa", "prize_100m": 10.706}, {"name": "Fujita Shinji", "prize_100m": 9.838}, {"name": "Shibata Yoshiomi", "prize_100m": 9.455}, {"name": "Yoi Hirofumi", "prize_100m": 9.409}, {"name": "Ando Katsumi", "prize_100m": 9.2}, {"name": "Demuro M.", "prize_100m": 8.907}, {"name": "Kawachi Hiroshi", "prize_100m": 8.649}, {"name": "Wada Ryuji", "prize_100m": 6.541}, {"name": "Minami Katsumi", "prize_100m": 6.243}, {"name": "Uchida Hiroyuki", "prize_100m": 6.186}, {"name": "Tanaka Katsuharu", "prize_100m": 6.11}, {"name": "Goto Hiroki", "prize_100m": 5.886}];
+function renderEarnBars(containerId, data) {
+  const el = document.getElementById(containerId);
+  const max = data[0].prize_100m;
+  data.forEach((d, i) => {
+    const pct = (d.prize_100m / max * 100).toFixed(1);
+    const rankClass = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+    el.innerHTML += `<div class="bar-row">
+      <span class="rank-badge ${rankClass}">${i+1}</span>
+      <span class="bar-name" title="${d.name}">${d.name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <span class="bar-val" style="width:55px">¥${d.prize_100m}B</span>
+    </div>`;
+  });
+}
+renderEarnBars('horseEarnBars', HORSE_EARN);
+renderEarnBars('jockeyEarnBars', JOCKEY_EARN);
+
+// ── Year line charts ──────────────────────────────────────────────────────────
+window.CHART_YEARS  = [1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021];
+window.TOP_HORSES   = ["Oguri Cap", "T M Opera O", "Gold Ship", "Lys Gracieux", "Deep Impact", "Kitasan Black", "Mejiro McQueen", "Hishi Amazon"];
+window.TOP_JOCKEYS  = ["Take Yutaka", "Yokoyama Norihiro", "Fukunaga Yuichi", "Ebina Seigi", "Lemaire C.", "Okabe Yukio", "Kawada Yoshimasa", "Iwata Yasunari"];
+window.HORSE_YWINS  = {"Oguri Cap": {"1986": 0, "1987": 0, "1988": 7, "1989": 3, "1990": 2, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "T M Opera O": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 2, "2000": 8, "2001": 2, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "Gold Ship": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 5, "2013": 2, "2014": 2, "2015": 2, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "Lys Gracieux": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 1, "2017": 2, "2018": 3, "2019": 3, "2020": 2, "2021": 0}, "Deep Impact": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 5, "2006": 5, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "Kitasan Black": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 3, "2016": 3, "2017": 4, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "Mejiro McQueen": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 1, "1991": 3, "1992": 2, "1993": 3, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "Hishi Amazon": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 1, "1994": 6, "1995": 2, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}};
+window.JOCKEY_YWINS = {"Take Yutaka": {"1986": 0, "1987": 3, "1988": 6, "1989": 11, "1990": 9, "1991": 9, "1992": 3, "1993": 12, "1994": 10, "1995": 8, "1996": 15, "1997": 19, "1998": 22, "1999": 12, "2000": 9, "2001": 5, "2002": 11, "2003": 13, "2004": 17, "2005": 23, "2006": 19, "2007": 15, "2008": 3, "2009": 7, "2010": 6, "2011": 6, "2012": 3, "2013": 11, "2014": 7, "2015": 10, "2016": 6, "2017": 13, "2018": 8, "2019": 6, "2020": 5, "2021": 2}, "Yokoyama Norihiro": {"1986": 0, "1987": 0, "1988": 1, "1989": 0, "1990": 9, "1991": 5, "1992": 3, "1993": 2, "1994": 0, "1995": 2, "1996": 9, "1997": 5, "1998": 12, "1999": 6, "2000": 7, "2001": 4, "2002": 2, "2003": 6, "2004": 6, "2005": 5, "2006": 5, "2007": 5, "2008": 12, "2009": 11, "2010": 11, "2011": 5, "2012": 6, "2013": 6, "2014": 9, "2015": 4, "2016": 2, "2017": 5, "2018": 4, "2019": 5, "2020": 7, "2021": 0}, "Fukunaga Yuichi": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 1, "1998": 3, "1999": 3, "2000": 5, "2001": 4, "2002": 8, "2003": 5, "2004": 6, "2005": 16, "2006": 7, "2007": 4, "2008": 3, "2009": 4, "2010": 7, "2011": 11, "2012": 10, "2013": 6, "2014": 3, "2015": 5, "2016": 11, "2017": 3, "2018": 5, "2019": 6, "2020": 11, "2021": 5}, "Ebina Seigi": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 1, "1993": 2, "1994": 1, "1995": 3, "1996": 4, "1997": 4, "1998": 14, "1999": 8, "2000": 2, "2001": 9, "2002": 4, "2003": 9, "2004": 7, "2005": 3, "2006": 1, "2007": 5, "2008": 5, "2009": 4, "2010": 6, "2011": 1, "2012": 7, "2013": 7, "2014": 11, "2015": 3, "2016": 4, "2017": 2, "2018": 2, "2019": 0, "2020": 0, "2021": 0}, "Lemaire C.": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 1, "2006": 2, "2007": 2, "2008": 2, "2009": 1, "2010": 0, "2011": 1, "2012": 2, "2013": 5, "2014": 2, "2015": 9, "2016": 13, "2017": 14, "2018": 20, "2019": 16, "2020": 17, "2021": 8}, "Okabe Yukio": {"1986": 5, "1987": 5, "1988": 6, "1989": 6, "1990": 5, "1991": 3, "1992": 6, "1993": 10, "1994": 12, "1995": 5, "1996": 5, "1997": 16, "1998": 7, "1999": 2, "2000": 6, "2001": 4, "2002": 9, "2003": 0, "2004": 0, "2005": 0, "2006": 0, "2007": 0, "2008": 0, "2009": 0, "2010": 0, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 0, "2016": 0, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 0}, "Kawada Yoshimasa": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 0, "2003": 0, "2004": 0, "2005": 0, "2006": 3, "2007": 2, "2008": 6, "2009": 4, "2010": 3, "2011": 3, "2012": 2, "2013": 3, "2014": 9, "2015": 8, "2016": 12, "2017": 4, "2018": 10, "2019": 15, "2020": 10, "2021": 12}, "Iwata Yasunari": {"1986": 0, "1987": 0, "1988": 0, "1989": 0, "1990": 0, "1991": 0, "1992": 0, "1993": 0, "1994": 0, "1995": 0, "1996": 0, "1997": 0, "1998": 0, "1999": 0, "2000": 0, "2001": 0, "2002": 1, "2003": 0, "2004": 1, "2005": 0, "2006": 3, "2007": 6, "2008": 13, "2009": 5, "2010": 7, "2011": 6, "2012": 11, "2013": 8, "2014": 9, "2015": 13, "2016": 0, "2017": 7, "2018": 2, "2019": 3, "2020": 3, "2021": 1}};
+const CHART_COLORS  = ["#e8335a", "#d4af37", "#00c9a7", "#7c5cbf", "#3a7bd5", "#ff6b35", "#2ecc71", "#e67e22"];
+
+let horseHidden  = {};
+let jockeyHidden = {};
+
+function drawYearChart(canvasId, labels, dataMap, hiddenMap, tooltipId, colorArr) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || canvas.offsetWidth === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = {top:20, right:20, bottom:28, left:36};
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+  const n = (window.CHART_YEARS||[]).length;
+
+  const allVals = labels.flatMap(l => !hiddenMap[l] ? Object.values(dataMap[l] || {}) : []);
+  const maxV = Math.max(...allVals, 1);
+
+  function xPos(i) { return pad.left + (i / (n-1)) * cw; }
+  function yPos(v) { return pad.top + ch - (v / maxV) * ch; }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let g = 1; g <= 4; g++) {
+    const y = pad.top + ch * (1 - g/4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left+cw, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.font = '9px DM Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxV * g/4), pad.left-4, y+3);
+  }
+
+  // Year labels
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '9px DM Mono, monospace';
+  ctx.textAlign = 'center';
+  (window.CHART_YEARS||[]).forEach((y, i) => {
+    if (y % 5 === 0 || y === 2021) ctx.fillText(y === 2021 ? '21*' : y, xPos(i), pad.top+ch+16);
+  });
+
+  // Lines
+  labels.forEach((label, li) => {
+    if (hiddenMap[label]) return;
+    const col = colorArr[li % colorArr.length];
+    const pts = CHART_YEARS.map((y,i) => [xPos(i), yPos((dataMap[label]||{})[y]||0)]);
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    pts.forEach(([x,y], i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.stroke();
+    pts.forEach(([x,y], i) => {
+      const v = (dataMap[label]||{})[CHART_YEARS[i]]||0;
+      if (v === 0) return;
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2);
+      ctx.fillStyle = col; ctx.fill();
+    });
+  });
+
+  // Hover
+  canvas.onmousemove = function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    let ci = 0, md = Infinity;
+    (window.CHART_YEARS||[]).forEach((_,i) => { const d = Math.abs(xPos(i)-mx); if(d<md){md=d;ci=i;} });
+    const yr = CHART_YEARS[ci];
+    const parts = labels.filter(l=>!hiddenMap[l]).map(l => {
+      const v = (dataMap[l]||{})[yr]||0;
+      return v > 0 ? l + ': ' + v : null;
+    }).filter(Boolean);
+    const tip = document.getElementById(tooltipId);
+    if (tip) tip.textContent = yr + (yr===2021?'*':'') + '  —  ' + (parts.length ? parts.join('  ·  ') : 'No wins');
+  };
+  canvas.onmouseleave = function() {
+    const tip = document.getElementById(tooltipId);
+    if (tip) tip.textContent = '';
+  };
+}
+
+function buildLegend(containerId, labels, hiddenMap, colorArr, redrawFn) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  labels.forEach((label, i) => {
+    const col = colorArr[i % colorArr.length];
+    const item = document.createElement('div');
+    item.className = 'legend-item' + (hiddenMap[label] ? ' muted' : '');
+    item.innerHTML = `<div class="legend-dot" style="background:${col}"></div>${label}`;
+    item.onclick = () => {
+      hiddenMap[label] = !hiddenMap[label];
+      item.classList.toggle('muted', hiddenMap[label]);
+      redrawFn();
+    };
+    el.appendChild(item);
+  });
+}
+
+function drawHorseChart() {
+  drawYearChart('horseYearChart', TOP_HORSES, HORSE_YWINS, horseHidden, 'horseChartTip', CHART_COLORS);
+}
+function drawJockeyChart() {
+  drawYearChart('jockeyYearChart', TOP_JOCKEYS, JOCKEY_YWINS, jockeyHidden, 'jockeyChartTip', CHART_COLORS);
+}
+
+buildLegend('horseLegend', TOP_HORSES, horseHidden, CHART_COLORS, drawHorseChart);
+buildLegend('jockeyLegend', TOP_JOCKEYS, jockeyHidden, CHART_COLORS, drawJockeyChart);
+
+// ── Tab switcher ──────────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'chart-h') setTimeout(drawHorseChart, 30);
+  if (id === 'chart-j') setTimeout(drawJockeyChart, 30);
+}
+
+window.addEventListener('resize', () => {
+  const activeTab = document.querySelector('.tab-pane.active');
+  if (activeTab && activeTab.id === 'tab-chart-h') drawHorseChart();
+  if (activeTab && activeTab.id === 'tab-chart-j') drawJockeyChart();
+});
+
+// ── Venue bars ──
+const venueColors = ['#e8335a','#d4701a','#d4af37','#2ecc71','#3498db','#9b59b6','#1abc9c','#e74c3c','#f39c12','#95a5a6'];
+const maxVenue = DATA.venue_wins[0].wins;
+DATA.venue_wins.forEach((d, i) => {
+  const pct = (d.wins / maxVenue * 100).toFixed(1);
+  document.getElementById('venueBars').innerHTML += `
+    <div class="venue-row">
+      <div class="venue-dot" style="background:${venueColors[i]}"></div>
+      <span class="venue-name">${d.venue}</span>
+      <div class="venue-bar-track"><div class="venue-bar-fill" style="width:${pct}%;background:${venueColors[i]}"></div></div>
+      <span class="venue-val">${d.wins}</span>
+    </div>`;
+});
+
+// ── Results table ──
+function oddsClass(o) {
+  if (o <= 3) return 'odds-low';
+  if (o >= 20) return 'odds-high';
+  return 'odds-mid';
+}
+
+// ── Pre-render all rows once, then show/hide with CSS ──────────────────────────
+function buildTable() {
+  const body = document.getElementById('resultsBody');
+  const frag = document.createDocumentFragment();
+  DATA.recent_g1.forEach((d, i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.i       = i;
+    tr.dataset.surface = (d.surface || '').toLowerCase();
+    tr.dataset.dist    = d.distance_m;
+    // Pre-build search string once — avoids repeated string ops on filter
+    tr.dataset.search  = [d.race_name, d.horse_name, d.jockey_name, d.trainer_name, d.venue]
+                           .join(' ').toLowerCase();
+    const oc = oddsClass(d.win_odds);
+    tr.innerHTML = `
+      <td><span style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted)">${d.race_date}</span></td>
+      <td><span class="g1-tag">G1</span> <a href="https://db.netkeiba.com/race/${d.race_id}/" target="_blank" class="race-link">${d.race_name}</a></td>
+      <td><span class="winner-horse">${d.horse_name}</span></td>
+      <td><span class="jockey-name">${d.jockey_name}</span></td>
+      <td style="color:var(--muted);font-size:0.75rem">${d.trainer_name}</td>
+      <td><span class="venue-badge">${d.venue}</span></td>
+      <td><span class="dist-val">${d.distance_m}m</span></td>
+      <td><span class="odds-val ${oc}">${d.win_odds}x</span></td>`;
+    frag.appendChild(tr);
+  });
+  body.appendChild(frag);
+}
+
+// Debounce — waits for user to stop typing before filtering
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  const f = activeFilter;
+  const rows = document.getElementById('resultsBody').rows;
+  let visible = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const dist = +r.dataset.dist;
+    const surf = r.dataset.surface;
+
+    let show = true;
+    if (f === 'turf'   && surf !== 'turf')                          show = false;
+    if (f === 'dirt'   && surf !== 'dirt')                          show = false;
+    if (f === 'sprint' && dist > 1400)                              show = false;
+    if (f === 'mile'   && (dist <= 1400 || dist > 1800))            show = false;
+    if (f === 'inter'  && (dist <= 1800 || dist > 2100))            show = false;
+    if (f === 'long'   && dist <= 2100)                             show = false;
+    if (show && q && !r.dataset.search.includes(q))                 show = false;
+
+    r.style.display = show ? '' : 'none';
+    if (show) visible++;
+  }
+
+  document.getElementById('countLabel').textContent = visible + ' results';
+  document.getElementById('noResults').style.display = visible ? 'none' : 'block';
+}
+
+const filterTableDebounced = debounce(filterTable, 80);
+
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterTable();
+}
+
+loadDashboard();
+</script>
+
+
+<div id="loadingOverlay" style="
+  position:fixed;inset:0;background:rgba(10,10,15,0.92);
+  z-index:9999;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1rem;">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:3px;
+               background:linear-gradient(135deg,#fff 40%,var(--accent));
+               -webkit-background-clip:text;-webkit-text-fill-color:transparent">
+    JRA GRADED RACES
+  </div>
+  <div style="width:200px;height:2px;background:var(--surface2);border-radius:1px;overflow:hidden">
+    <div style="height:100%;background:var(--accent);animation:loadBar 1.5s ease-in-out infinite;
+                border-radius:1px"></div>
+  </div>
+  <div id="loadingMsg" style="font-family:'DM Mono',monospace;font-size:0.7rem;
+                               color:var(--muted);letter-spacing:1px">Connecting...</div>
+</div>
+<style>
+@keyframes loadBar {{
+  0%   {{ width:0%;margin-left:0 }}
+  50%  {{ width:60%;margin-left:20% }}
+  100% {{ width:0%;margin-left:100% }}
+}}
+</style>
+
+<!-- Settings Toggle -->
+<button class="settings-toggle" onclick="toggleSettings()" title="Customize">⚙️</button>
+
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-title">⚙ Customize</div>
+
+  <div class="settings-group">
+    <div class="settings-label">Theme</div>
+    <div class="theme-toggle-row">
+      <span style="font-size:0.8rem;color:var(--text)">☀️ Light mode</span>
+      <div class="toggle-switch" id="themeToggle" onclick="toggleTheme()">
+        <div class="toggle-knob"></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="settings-divider">
+
+  <div class="settings-group">
+    <div class="settings-label">Accent Color</div>
+    <div class="color-wheel-wrap">
+      <input type="color" class="color-wheel" id="colorWheel" value="#e8335a" oninput="updateAccent(this.value)">
+      <input type="text" class="color-hex" id="colorHex" value="#e8335a" onchange="updateAccentFromHex(this.value)" maxlength="7">
+    </div>
+    <div class="color-presets">
+      <div class="preset-dot" style="background:#e8335a" onclick="updateAccent('#e8335a')" title="Crimson"></div>
+      <div class="preset-dot" style="background:#d4af37" onclick="updateAccent('#d4af37')" title="Gold"></div>
+      <div class="preset-dot" style="background:#00c9a7" onclick="updateAccent('#00c9a7')" title="Teal"></div>
+      <div class="preset-dot" style="background:#7c5cbf" onclick="updateAccent('#7c5cbf')" title="Purple"></div>
+      <div class="preset-dot" style="background:#3a7bd5" onclick="updateAccent('#3a7bd5')" title="Blue"></div>
+      <div class="preset-dot" style="background:#ff6b35" onclick="updateAccent('#ff6b35')" title="Orange"></div>
+    </div>
+  </div>
+
+  <hr class="settings-divider">
+
+  <div class="settings-group" style="margin-bottom:0">
+    <div class="settings-label">Font</div>
+    <div class="font-pills">
+      <button class="font-pill active" onclick="setFont('dm','DM Sans')" id="font-dm">
+        <span class="font-pill-name" style="font-family:'DM Sans'">DM Sans</span>
+        <span class="font-pill-sample" style="font-family:'DM Sans'">Clean · Modern · Default</span>
+      </button>
+      <button class="font-pill" onclick="setFont('grotesk','Space Grotesk')" id="font-grotesk">
+        <span class="font-pill-name" style="font-family:'Space Grotesk'">Space Grotesk</span>
+        <span class="font-pill-sample" style="font-family:'Space Grotesk'">Geometric · Technical</span>
+      </button>
+      <button class="font-pill" onclick="setFont('playfair','Playfair Display')" id="font-playfair">
+        <span class="font-pill-name" style="font-family:'Playfair Display'">Playfair Display</span>
+        <span class="font-pill-sample" style="font-family:'Playfair Display'">Elegant · Editorial</span>
+      </button>
+      <button class="font-pill" onclick="setFont('syne','Syne')" id="font-syne">
+        <span class="font-pill-name" style="font-family:'Syne'">Syne</span>
+        <span class="font-pill-sample" style="font-family:'Syne'">Bold · Expressive</span>
+      </button>
+      <button class="font-pill" onclick="setFont('ibm','IBM Plex Sans')" id="font-ibm">
+        <span class="font-pill-name" style="font-family:'IBM Plex Sans'">IBM Plex Sans</span>
+        <span class="font-pill-sample" style="font-family:'IBM Plex Sans'">Sharp · Technical</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Settings panel ────────────────────────────────────────────────────────────
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel.contains(e.target) && !e.target.classList.contains('settings-toggle')) {
+    panel.classList.remove('open');
+  }
+});
+
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+let isLight = false;
+function toggleTheme() {
+  isLight = !isLight;
+  document.body.classList.toggle('light', isLight);
+  document.getElementById('themeToggle').classList.toggle('on', isLight);
+  localStorage.setItem('jra-theme', isLight ? 'light' : 'dark');
+}
+
+// ── Accent color ──────────────────────────────────────────────────────────────
+function updateAccent(hex) {
+  document.documentElement.style.setProperty('--accent', hex);
+  document.getElementById('colorWheel').value = hex;
+  document.getElementById('colorHex').value = hex;
+  // Update bar fills
+  document.querySelectorAll('.bar-fill').forEach(el => {
+    el.style.background = `linear-gradient(90deg, ${hex}, ${lighten(hex, 30)})`;
+  });
+  document.querySelectorAll('.year-bar').forEach(el => {
+    el.style.background = `linear-gradient(180deg, ${hex}, ${darken(hex, 30)})`;
+  });
+  localStorage.setItem('jra-accent', hex);
+}
+function updateAccentFromHex(val) {
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) updateAccent(val);
+}
+function lighten(hex, pct) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, (n >> 16) + pct);
+  const g = Math.min(255, ((n >> 8) & 0xff) + pct);
+  const b = Math.min(255, (n & 0xff) + pct);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+function darken(hex, pct) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, (n >> 16) - pct);
+  const g = Math.max(0, ((n >> 8) & 0xff) - pct);
+  const b = Math.max(0, (n & 0xff) - pct);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+// ── Font selector ─────────────────────────────────────────────────────────────
+const FONTS = {
+  'dm':       'DM Sans',
+  'grotesk':  'Space Grotesk',
+  'playfair': 'Playfair Display',
+  'syne':     'Syne',
+  'ibm':      'IBM Plex Sans',
+};
+function setFont(key, family) {
+  document.body.style.fontFamily = `'${family}', sans-serif`;
+  document.querySelectorAll('.font-pill').forEach(el => el.classList.remove('active'));
+  document.getElementById('font-' + key).classList.add('active');
+  localStorage.setItem('jra-font', key);
+}
+
+// ── Restore saved preferences ─────────────────────────────────────────────────
+(function() {
+  const savedAccent = localStorage.getItem('jra-accent');
+  if (savedAccent) updateAccent(savedAccent);
+  const savedTheme = localStorage.getItem('jra-theme');
+  if (savedTheme === 'light') toggleTheme();
+  const savedFont = localStorage.getItem('jra-font');
+  if (savedFont && FONTS[savedFont]) setFont(savedFont, FONTS[savedFont]);
+})();
+</script>
+
+</body>
+</html>
