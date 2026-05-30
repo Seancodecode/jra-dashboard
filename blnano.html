@@ -233,7 +233,7 @@ let spreadFactor = 1;
 let maxDepth = 0;
 
 let globalTime    = 0;
-let glowMode      = 'manual'; // 'manual' or 'audio'
+let glowMode      = 'manual';
 let manualGlowVal = 1.0;
 let smoothedEnergy= 0;
 let isWaveOn      = false;
@@ -334,15 +334,23 @@ function toggleGlowMode() {
     btn.textContent = 'AUDIO';
     btn.style.color = '#00ffcc';
     btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '0.3';
+    slider.style.pointerEvents = 'none';
     label.textContent = 'Max Threshold';
     valDisp.textContent = manualGlowVal.toFixed(1) + 'x Cap';
+    
+    NG.selectAll('.aura').attr('filter', 'url(#tvStatic)');
   } else {
     glowMode = 'manual';
     btn.textContent = 'MANUAL';
     btn.style.color = '';
     btn.style.borderColor = '';
+    slider.style.opacity = '0.8';
+    slider.style.pointerEvents = 'auto';
     label.textContent = 'Intensity';
     valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
+    
+    NG.selectAll('.aura').attr('filter', null);
     applyStaticGlow(manualGlowVal);
   }
 }
@@ -390,10 +398,26 @@ d3.timer(elapsed => {
       let sum = 0;
       let limit = Math.floor(dataArray.length * 0.4);
       for(let i = 0; i < limit; i++) sum += dataArray[i];
-      let currentEnergy = Math.min(1, ((sum / limit) / 255));
+      let currentEnergy = Math.min(1, ((sum / limit) / 255) * 1.5);
       smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.3;
       
       LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
+
+      if (smoothedEnergy > 0.01) {
+        d3.select('#noiseOffset')
+          .attr('dx', Math.random() * 500)
+          .attr('dy', Math.random() * 500);
+          
+        let grunge = Math.min(1, smoothedEnergy * 2.5); 
+        let invGrunge = 1 - grunge;
+        
+        d3.select('#noiseIntensity').attr('values', 
+          `${grunge} 0 0 0 ${invGrunge} ` +
+          `0 ${grunge} 0 0 ${invGrunge} ` +
+          `0 0 ${grunge} 0 ${invGrunge} ` +
+          `0 0 0 1 0`
+        );
+      }
     }
   } else {
     if (glowMode === 'audio') smoothedEnergy = 0;
@@ -413,11 +437,11 @@ d3.timer(elapsed => {
       
       if (glowMode === 'audio') {
         let energy = Math.pow(normFreq, 2); 
-        let cappedEnergy = energy * manualGlowVal; // Slider controls max limit
+        let cappedEnergy = energy * manualGlowVal;
         
         el.select('.aura')
-          .attr('opacity', Math.min(1, cappedEnergy * 0.8))
-          .attr('transform', `scale(${1 + (cappedEnergy * 1.5)})`); // Literally expands the light
+          .attr('opacity', Math.min(1, cappedEnergy * 1.5))
+          .attr('transform', `scale(${1 + (cappedEnergy * 1.5)})`);
 
         let base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.15);
         el.select('.main-node')
@@ -741,7 +765,7 @@ const mapLayer = g.append('g').attr('id', 'mapLayer');
 
 const defs = svg.append('defs');
 
-// Generate a flawless radial gradient for every single color in the palette
+// Pure Radial Gradients for the Aura
 const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
 allColors.forEach(c => {
   const grad = defs.append('radialGradient')
@@ -753,6 +777,35 @@ allColors.forEach(c => {
   grad.append('stop').attr('offset', '50%').attr('stop-color', c).attr('stop-opacity', 0.3);
   grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
 });
+
+// Dynamic TV Static Texture Filter
+const staticFilter = defs.append('filter')
+  .attr('id', 'tvStatic')
+  .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
+  
+staticFilter.append('feTurbulence')
+  .attr('type', 'fractalNoise')
+  .attr('baseFrequency', '1.2')
+  .attr('numOctaves', '2')
+  .attr('result', 'noise');
+  
+staticFilter.append('feOffset')
+  .attr('id', 'noiseOffset')
+  .attr('dx', '0').attr('dy', '0')
+  .attr('in', 'noise')
+  .attr('result', 'movedNoise');
+  
+staticFilter.append('feColorMatrix')
+  .attr('id', 'noiseIntensity')
+  .attr('type', 'matrix')
+  .attr('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0')
+  .attr('in', 'movedNoise')
+  .attr('result', 'controlledNoise');
+  
+staticFilter.append('feBlend')
+  .attr('mode', 'multiply')
+  .attr('in', 'SourceGraphic')
+  .attr('in2', 'controlledNoise');
 
 const LG = mapLayer.append('g');
 const NG = mapLayer.append('g');
@@ -924,11 +977,12 @@ function update(source) {
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  // The new decoupled, pure math Aura layer
+  // Pure Math Radial Gradient Aura
   inner.append('circle')
     .attr('class', 'aura')
     .attr('r', d => nodeR(d) * 4.5) 
     .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
+    .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null)
     .attr('opacity', 0)
     .style('pointer-events', 'none');
 
