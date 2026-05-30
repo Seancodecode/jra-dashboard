@@ -1736,6 +1736,16 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
 <div class="settings-panel" id="settingsPanel">
   <div class="settings-title">⚙ Customize</div>
 
+  <button onclick="resetAllSettings()" style="
+    width:100%;font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:1px;
+    text-transform:uppercase;background:var(--surface2);border:1px solid var(--border);
+    border-radius:8px;padding:0.4rem 0;color:var(--muted);cursor:pointer;
+    transition:all 0.2s;margin-bottom:0.8rem;"
+    onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+    onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+    ↺ Reset to defaults
+  </button>
+
   <div class="settings-group">
     <div class="settings-label">Theme</div>
     <div class="theme-toggle-row">
@@ -1825,6 +1835,36 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
 
 <script>
 // ── Settings panel ────────────────────────────────────────────────────────────
+
+function resetAllSettings() {
+  // Accent color
+  updateAccent('#e8335a');
+
+  // Theme — back to dark
+  if (isLight) toggleTheme();
+
+  // Font — back to DM Sans
+  setFont('dm', 'DM Sans');
+
+  // Sound — off
+  if (soundEnabled) toggleSound();
+  soundVolume = 0.3;
+  document.getElementById('volumeSlider').value = 0.3;
+
+  // Clear localStorage
+  localStorage.removeItem('jra-accent');
+  localStorage.removeItem('jra-theme');
+  localStorage.removeItem('jra-font');
+  localStorage.removeItem('jra-sound');
+  localStorage.removeItem('jra-volume');
+
+  // Reset drop zones
+  document.getElementById('clickDropZone').classList.remove('has-file');
+  document.getElementById('scrollDropZone').classList.remove('has-file');
+  clickBuffer = null;
+  scrollBuffer = null;
+}
+
 function toggleSettings() {
   document.getElementById('settingsPanel').classList.toggle('open');
 }
