@@ -154,7 +154,7 @@
            oninput="wobbleSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
 
     <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Energy Flow</span>
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Waveform</span>
       <button class="btn" id="spectrumBtn" onclick="toggleSpectrum()" style="padding:2px 6px;font-size:8px;">OFF</button>
     </div>
     <input type="range" id="spectrumSpeed" min="0.5" max="5" step="0.1" value="2"
@@ -205,7 +205,6 @@ let spectrumSpeed = 2;
 let isFloatOn     = false;
 let floatSim      = null;
 
-// Global animation loop
 d3.timer(elapsed => {
   globalTime = elapsed;
   
@@ -217,12 +216,7 @@ d3.timer(elapsed => {
     });
   }
 
-  if (isSpectrumOn) {
-    LG.selectAll('path').attr('stroke-dashoffset', () => -globalTime * 0.02 * spectrumSpeed);
-  }
-
-  // Redraw strings if wobbling without floating
-  if (isWobbleOn && !isFloatOn) {
+  if (isSpectrumOn || (isWobbleOn && !isFloatOn)) {
     redrawLinksFast();
   }
 });
@@ -300,13 +294,12 @@ function toggleSpectrum() {
     btn.style.color = '#00ffcc';
     btn.style.borderColor = '#00ffcc';
     slider.style.opacity = '1';
-    LG.selectAll('path').attr('stroke-dasharray', '8, 16').attr('stroke-linecap', 'round');
   } else {
     btn.textContent = 'OFF';
     btn.style.color = '';
     btn.style.borderColor = '';
     slider.style.opacity = '0.5';
-    LG.selectAll('path').attr('stroke-dasharray', 'none').attr('stroke-dashoffset', '0');
+    redrawLinksFast();
   }
 }
 
@@ -474,7 +467,6 @@ const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2VmbGF5a3R4eWppZHZrZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODQyMjMsImV4cCI6MjA5NTY2MDIyM30.Yq0sdcWYzB0rQyMdXlOAwFAi1wFrHkJcdYs-0Z6uJvU';
 const db = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-// Swapped colors to extremely vibrant pure hexes for the neon effect
 const colorScale = d3.scaleOrdinal([
   '#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500',
   '#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222'
@@ -506,14 +498,12 @@ const zoom = d3.zoom().scaleExtent([0.05, 8]).on('zoom', e => {
 svg.call(zoom);
 const g = svg.append('g');
 
-// Upgraded double-layered Neon Glow filter
+// Optimized single-pass filter to fix lag
 const defs = svg.append('defs');
-const gf   = defs.append('filter').attr('id', 'gl').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-gf.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'blur1');
-gf.append('feGaussianBlur').attr('stdDeviation', '12').attr('result', 'blur2');
+const gf   = defs.append('filter').attr('id', 'gl').attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
+gf.append('feGaussianBlur').attr('stdDeviation', '6').attr('result', 'blur');
 const fm   = gf.append('feMerge');
-fm.append('feMergeNode').attr('in', 'blur2');
-fm.append('feMergeNode').attr('in', 'blur1');
+fm.append('feMergeNode').attr('in', 'blur');
 fm.append('feMergeNode').attr('in', 'SourceGraphic');
 
 const LG = g.append('g');
@@ -560,6 +550,34 @@ function linkPath(s, t) {
   const dy  = t.cartY - s.cartY;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   let bow = len * 0.08;
+
+  if (isSpectrumOn) {
+    const segments = 14;
+    let path = `M${s.cartX},${s.cartY}`;
+    const phase = globalTime * 0.005 * spectrumSpeed;
+    const angle = Math.atan2(dy, dx);
+    const freq = 3;
+    const amp = 12;
+
+    for (let i = 1; i <= segments; i++) {
+      const pct = i / segments;
+      const cx_ctrl = mx - dy/len*bow;
+      const cy_ctrl = my + dx/len*bow;
+
+      const omt = 1 - pct;
+      const baseX = omt * omt * s.cartX + 2 * omt * pct * cx_ctrl + pct * pct * t.cartX;
+      const baseY = omt * omt * s.cartY + 2 * omt * pct * cy_ctrl + pct * pct * t.cartY;
+
+      const edgeTaper = Math.sin(pct * Math.PI);
+      const waveOffset = Math.sin(pct * freq * Math.PI * 2 - phase) * amp * edgeTaper;
+
+      const perpX = -Math.sin(angle) * waveOffset;
+      const perpY = Math.cos(angle) * waveOffset;
+
+      path += ` L${baseX + perpX},${baseY + perpY}`;
+    }
+    return path;
+  }
 
   if (isWobbleOn) {
     const phase = s.depth;
@@ -701,18 +719,15 @@ function update(source) {
   lk.enter().append('path')
     .attr('fill', 'none')
     .attr('stroke', d => bcolor(d.target))
-    .attr('stroke-width', d => d.source.id === 'root' ? 3.5 : 2)
+    .attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5)
     .attr('stroke-opacity', 0)
-    .attr('filter', 'url(#gl)')
     .attr('d', d => {
       const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy, depth: 0 };
       return linkPath(o, o);
     })
     .merge(lk)
-    .attr('stroke-dasharray', isSpectrumOn ? '8, 16' : 'none')
-    .attr('stroke-linecap', isSpectrumOn ? 'round' : 'butt')
     .transition().duration(400)
-    .attr('stroke-opacity', d => d.source.id === 'root' ? 0.75 : 0.5)
+    .attr('stroke-opacity', d => d.source.id === 'root' ? 0.8 : 0.6)
     .attr('d', d => linkPath(d.source, d.target));
 
   lk.exit().transition().duration(400)
@@ -724,7 +739,6 @@ function update(source) {
 
   nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
 
-  // Dynamically feed all active nodes into the physics engine if it is running
   if (isFloatOn && floatSim) {
     const currentNodes = root.descendants();
     floatSim.nodes(currentNodes);
