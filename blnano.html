@@ -42,6 +42,14 @@
     <label style="font-size: 9px; color: rgba(255,255,255,0.45); font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Spread</label>
     <input type="range" min="0.5" max="3" step="0.1" value="1" oninput="updateSpacing(this.value)" style="width: 100%; cursor: pointer;">
   </div>
+
+  <div style="display: flex; flex-direction: column; gap: 5px; background: rgba(15,15,22,0.92); border: 1px solid rgba(255,255,255,0.12); padding: 8px 10px; border-radius: 6px; margin-top: 5px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <label style="font-size: 9px; color: rgba(255,255,255,0.45); font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Wave Anim</label>
+      <button class="btn" id="waveBtn" onclick="toggleWave()" style="padding: 2px 6px; font-size: 8px;">OFF</button>
+    </div>
+    <input type="range" id="waveSpeed" min="0.2" max="3" step="0.1" value="1" oninput="updateWaveSpeed(this.value)" style="width: 100%; cursor: pointer; opacity: 0.5;">
+  </div>
 </div>
 <div id="tip"></div>
 <div class="hint">Click to expand/collapse · Drag node to reposition · Scroll to zoom</div>
@@ -49,18 +57,58 @@
 const W = window.innerWidth, H = window.innerHeight;
 const cx = W/2, cy = H/2;
 let root = null;
-let spreadFactor = 1; // New global multiplier
+let spreadFactor = 1; 
+
+let waveTimer = null;
+let isWaveOn = false;
+let waveSpeed = 1;
 
 function updateSpacing(val) {
   spreadFactor = parseFloat(val);
   if (root) {
-    // Clear fixed, dragged positions so the tree scales cleanly
     traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
     update(root);
   }
 }
 
-// Replace these with your actual Supabase credentials
+function toggleWave() {
+  isWaveOn = !isWaveOn;
+  const btn = document.getElementById('waveBtn');
+  const slider = document.getElementById('waveSpeed');
+  
+  if (isWaveOn) {
+    btn.textContent = "ON";
+    btn.style.color = "#00c9a7";
+    btn.style.borderColor = "#00c9a7";
+    slider.style.opacity = "1";
+    if (!waveTimer) startWave();
+  } else {
+    btn.textContent = "OFF";
+    btn.style.color = "";
+    btn.style.borderColor = "";
+    slider.style.opacity = "0.5";
+    if (waveTimer) {
+      waveTimer.stop();
+      waveTimer = null;
+    }
+    NG.selectAll("g.node-inner").attr("transform", "scale(1)");
+  }
+}
+
+function updateWaveSpeed(val) {
+  waveSpeed = parseFloat(val);
+}
+
+function startWave() {
+  waveTimer = d3.timer((elapsed) => {
+    NG.selectAll("g.node-inner").attr("transform", d => {
+      const phase = d.depth * 1.5;
+      const scale = 1 + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
+      return `scale(${scale})`;
+    });
+  });
+}
+
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2VmbGF5a3R4eWppZHZrZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODQyMjMsImV4cCI6MjA5NTY2MDIyM30.Yq0sdcWYzB0rQyMdXlOAwFAi1wFrHkJcdYs-0Z6uJvU';
 const db = window.supabase.createClient(supabaseUrl, supabaseKey);
@@ -166,7 +214,6 @@ function update(source) {
   const links = root.links();
 
   nodes.forEach(d => {
-    // Multiply the radius by our new spreadFactor slider
     d.y = RADII[Math.min(d.depth, RADII.length - 1)] * spreadFactor;
     if (d.data.ox != null) {
       d.cartX = d.data.ox;
@@ -223,11 +270,13 @@ function update(source) {
     })
     .attr("opacity", 0);
 
-  enter.filter(d => d.id === "root").append("circle")
+  const inner = enter.append("g").attr("class", "node-inner");
+
+  inner.filter(d => d.id === "root").append("circle")
     .attr("r", 52).attr("fill", "none").attr("stroke", "#d4af37")
     .attr("stroke-width", 0.5).attr("opacity", 0.15).attr("filter", "url(#gl)");
   
-  enter.append("circle")
+  inner.append("circle")
     .attr("class", "main-node")
     .attr("r", d => nodeR(d))
     .attr("fill", d => (d.data.g1 > 0 || d.id === "root") ? bcolor(d) : "transparent")
@@ -236,19 +285,19 @@ function update(source) {
     .attr("stroke-opacity", 0.7)
     .attr("filter", d => (d.id === "root" || d.data.g1 >= 5) ? "url(#gl)" : null);
 
-  enter.append("text").text(d => d.data.name)
+  inner.append("text").text(d => d.data.name)
     .attr("dy", d => nodeR(d) + 14).attr("text-anchor", "middle")
     .attr("font-size", d => d.id === "root" ? "14px" : (d.data.g1 >= 5 ? "12px" : "10px"))
     .attr("font-weight", d => (d.id === "root" || d.data.g1 >= 5) ? "800" : "600")
     .attr("fill", d => d.id === "root" ? "#fff" : (d.data.g1 > 0 ? bcolor(d) : "rgba(255,255,255,0.75)"))
     .attr("pointer-events", "none");
 
-  enter.filter(d => d.data.g1 >= 2).append("text").text(d => d.data.g1 + "G1")
+  inner.filter(d => d.data.g1 >= 2).append("text").text(d => d.data.g1 + "G1")
     .attr("dy", d => -nodeR(d) - 6).attr("text-anchor", "middle")
     .attr("font-size", "10px").attr("font-family", "monospace").attr("font-weight", "800")
     .attr("fill", d => bcolor(d)).attr("pointer-events", "none");
 
-  enter.filter(d => d._children).append("text")
+  inner.filter(d => d._children).append("text")
     .attr("class", "pm")
     .attr("text-anchor", "middle").attr("dominant-baseline", "central")
     .attr("font-size", "12px").attr("fill", d => bcolor(d)).attr("fill-opacity", 0.65)
@@ -325,7 +374,6 @@ function openLevel(max){
   update(root);
 }
 
-// New fetch function replacing the file upload logic
 async function fetchData() {
   const welcome = document.getElementById('welcome');
   welcome.style.display = 'block';
