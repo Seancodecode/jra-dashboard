@@ -553,42 +553,6 @@
     border-bottom-color: var(--accent);
   }
 
-
-  /* ── SOUND SETTINGS ── */
-  .sound-drop-zone {
-    border: 1px dashed var(--border);
-    border-radius: 8px;
-    padding: 0.5rem;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 0.65rem;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-    position: relative;
-  }
-  .sound-drop-zone:hover { border-color: var(--accent); color: var(--accent); }
-  .sound-drop-zone.has-file { border-color: rgba(46,204,113,0.4); color: #2ecc71; }
-  .sound-drop-zone input[type=file] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
-  }
-  .sound-row {
-    display: flex; align-items: center;
-    justify-content: space-between; gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  .sound-label { font-size: 0.72rem; color: var(--text); }
-  .volume-slider {
-    -webkit-appearance: none; appearance: none;
-    width: 100%; height: 3px; border-radius: 2px;
-    background: var(--surface2); outline: none; margin-top: 0.4rem;
-    cursor: pointer;
-  }
-  .volume-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 12px; height: 12px;
-    border-radius: 50%; background: var(--accent); cursor: pointer;
-  }
-
   /* ── SEARCH ── */
   .search-bar {
     display: flex;
@@ -753,7 +717,7 @@
       <canvas id="prizeChart" style="width:100%;height:90px;display:block;cursor:crosshair"></canvas>
       <div style="display:flex;justify-content:space-between;margin-top:3px">
         <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted)">1986</span>
-        <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--accent)">2025</span>
+        <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted)">2025</span>
       </div>
       <div style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted);margin-top:2px">
         1986–2025 · Graded races only
@@ -1280,8 +1244,8 @@ async function loadDashboard() {
     window.HORSE_YWINS  = horseYearWins;
     window.JOCKEY_YWINS = jockeyYearWins;
 
-    buildLegend('horseLegend', window.TOP_HORSES||[], horseHidden, CHART_COLORS, drawHorseChart);
-    buildLegend('jockeyLegend', window.TOP_JOCKEYS||[], jockeyHidden, CHART_COLORS, drawJockeyChart);
+    buildLegend('horseLegend', top5Horses, horseHidden, CHART_COLORS, drawHorseChart);
+    buildLegend('jockeyLegend', top5Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
 
     // Build G1 table
     window.DATA = { recent_g1: g1Table };
@@ -1410,7 +1374,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
     (window.PRIZE_DATA||[]).forEach((d, i) => {
       if (d.year % 5 === 0 || d.year === 2021) {
         ctx.fillStyle = d.year === 2021 ? accent : 'rgba(255,255,255,0.3)';
-        ctx.fillText(d.year === 2021 ? '2021*' : d.year, xPos(i), pad.top + ch + 12);
+        ctx.fillText(d.year, xPos(i), pad.top + ch + 12);
       }
     });
   }
@@ -1650,7 +1614,6 @@ function buildTable() {
     tr.dataset.search  = [d.race_name, d.horse_name, d.jockey_name, d.trainer_name, d.venue]
                            .join(' ').toLowerCase();
     const oc = oddsClass(d.win_odds);
-      const winOdds = d.win_odds;
     tr.innerHTML = `
       <td><span style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted)">${d.race_date}</span></td>
       <td><span class="g1-tag">G1</span> <a href="https://db.netkeiba.com/race/${d.race_id}/" target="_blank" class="race-link">${d.race_name}</a></td>
@@ -1742,16 +1705,6 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
 <div class="settings-panel" id="settingsPanel">
   <div class="settings-title">⚙ Customize</div>
 
-  <button onclick="resetAllSettings()" style="
-    width:100%;font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:1px;
-    text-transform:uppercase;background:var(--surface2);border:1px solid var(--border);
-    border-radius:8px;padding:0.4rem 0;color:var(--muted);cursor:pointer;
-    transition:all 0.2s;margin-bottom:0.8rem;"
-    onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-    onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
-    ↺ Reset to defaults
-  </button>
-
   <div class="settings-group">
     <div class="settings-label">Theme</div>
     <div class="theme-toggle-row">
@@ -1807,70 +1760,10 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
       </button>
     </div>
   </div>
-
-  <hr class="settings-divider">
-
-  <div class="settings-group" style="margin-bottom:0">
-    <div class="settings-label">Sound Effects</div>
-    <div class="sound-row">
-      <span class="sound-label">Enable sounds</span>
-      <div class="toggle-switch" id="soundToggle" onclick="toggleSound()">
-        <div class="toggle-knob"></div>
-      </div>
-    </div>
-    <div id="soundOptions" style="opacity:0.4;pointer-events:none;transition:opacity 0.2s">
-      <div style="margin-bottom:0.5rem">
-        <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.3rem">Volume</div>
-        <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="0.3"
-          oninput="updateVolume(this.value)">
-      </div>
-      <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.3rem">Click sound</div>
-      <div class="sound-drop-zone" id="clickDropZone">
-        <input type="file" accept=".mp3,.wav,.ogg" onchange="loadClickSound(this)">
-        🎵 Default · Drop custom file
-      </div>
-      <div style="font-size:0.65rem;color:var(--muted);margin:0.5rem 0 0.3rem">Scroll sound</div>
-      <div class="sound-drop-zone" id="scrollDropZone">
-        <input type="file" accept=".mp3,.wav,.ogg" onchange="loadScrollSound(this)">
-        🎵 Default · Drop custom file
-      </div>
-    </div>
-  </div>
-
 </div>
 
 <script>
 // ── Settings panel ────────────────────────────────────────────────────────────
-
-function resetAllSettings() {
-  // Accent color
-  updateAccent('#e8335a');
-
-  // Theme — back to dark
-  if (isLight) toggleTheme();
-
-  // Font — back to DM Sans
-  setFont('dm', 'DM Sans');
-
-  // Sound — off
-  if (soundEnabled) toggleSound();
-  soundVolume = 0.3;
-  document.getElementById('volumeSlider').value = 0.3;
-
-  // Clear localStorage
-  localStorage.removeItem('jra-accent');
-  localStorage.removeItem('jra-theme');
-  localStorage.removeItem('jra-font');
-  localStorage.removeItem('jra-sound');
-  localStorage.removeItem('jra-volume');
-
-  // Reset drop zones
-  document.getElementById('clickDropZone').classList.remove('has-file');
-  document.getElementById('scrollDropZone').classList.remove('has-file');
-  clickBuffer = null;
-  scrollBuffer = null;
-}
-
 function toggleSettings() {
   document.getElementById('settingsPanel').classList.toggle('open');
 }
@@ -1936,135 +1829,6 @@ function setFont(key, family) {
   document.getElementById('font-' + key).classList.add('active');
   localStorage.setItem('jra-font', key);
 }
-
-
-// ── Sound Effects ─────────────────────────────────────────────────────────────
-let soundEnabled = false;
-let soundVolume = 0.3;
-let clickAudioCtx = null;
-let scrollAudioCtx = null;
-let clickBuffer = null;
-let scrollBuffer = null;
-let lastScrollSound = 0;
-const SCROLL_THROTTLE = 120; // ms between scroll sounds
-
-function getAudioCtx() {
-  if (!clickAudioCtx) clickAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return clickAudioCtx;
-}
-
-// Generate default click sound — short soft tick
-function makeDefaultClick() {
-  const ctx = getAudioCtx();
-  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) {
-    const t = i / ctx.sampleRate;
-    data[i] = Math.sin(2 * Math.PI * 800 * t) * Math.exp(-t * 80) * 0.4;
-  }
-  clickBuffer = buf;
-}
-
-// Generate default scroll sound — softer, higher tick
-function makeDefaultScroll() {
-  const ctx = getAudioCtx();
-  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) {
-    const t = i / ctx.sampleRate;
-    data[i] = Math.sin(2 * Math.PI * 1200 * t) * Math.exp(-t * 120) * 0.25;
-  }
-  scrollBuffer = buf;
-}
-
-function playBuffer(buffer) {
-  if (!buffer || !soundEnabled) return;
-  const ctx = getAudioCtx();
-  if (ctx.state === 'suspended') ctx.resume();
-  const src = ctx.createBufferSource();
-  const gain = ctx.createGain();
-  gain.gain.value = soundVolume;
-  src.buffer = buffer;
-  src.connect(gain);
-  gain.connect(ctx.destination);
-  src.start();
-}
-
-function playClick() { playBuffer(clickBuffer); }
-function playScroll() {
-  const now = Date.now();
-  if (now - lastScrollSound < SCROLL_THROTTLE) return;
-  lastScrollSound = now;
-  playBuffer(scrollBuffer);
-}
-
-function toggleSound() {
-  soundEnabled = !soundEnabled;
-  document.getElementById('soundToggle').classList.toggle('on', soundEnabled);
-  document.getElementById('soundOptions').style.opacity = soundEnabled ? '1' : '0.4';
-  document.getElementById('soundOptions').style.pointerEvents = soundEnabled ? 'auto' : 'none';
-  if (soundEnabled) {
-    const ctx = getAudioCtx(); // init context on user gesture
-    if (ctx.state === 'suspended') ctx.resume();
-    makeDefaultClick();
-    makeDefaultScroll();
-  }
-  localStorage.setItem('jra-sound', soundEnabled ? '1' : '0');
-  localStorage.setItem('jra-volume', soundVolume);
-}
-
-function updateVolume(val) {
-  soundVolume = parseFloat(val);
-  localStorage.setItem('jra-volume', soundVolume);
-}
-
-async function loadCustomSound(file, type) {
-  const ctx = getAudioCtx();
-  const arrayBuf = await file.arrayBuffer();
-  const audioBuf = await ctx.decodeAudioData(arrayBuf);
-  if (type === 'click') clickBuffer = audioBuf;
-  else scrollBuffer = audioBuf;
-}
-
-function loadClickSound(input) {
-  if (!input.files[0]) return;
-  loadCustomSound(input.files[0], 'click');
-  document.getElementById('clickDropZone').classList.add('has-file');
-  document.getElementById('clickDropZone').childNodes[1].textContent = '✓ ' + input.files[0].name;
-}
-function loadScrollSound(input) {
-  if (!input.files[0]) return;
-  loadCustomSound(input.files[0], 'scroll');
-  document.getElementById('scrollDropZone').classList.add('has-file');
-  document.getElementById('scrollDropZone').childNodes[1].textContent = '✓ ' + input.files[0].name;
-}
-
-// Hook scroll
-let scrollTicking = false;
-window.addEventListener('scroll', () => {
-  if (!scrollTicking) {
-    requestAnimationFrame(() => { playScroll(); scrollTicking = false; });
-    scrollTicking = true;
-  }
-}, { passive: true });
-
-// Hook clicks on interactive elements
-document.addEventListener('click', (e) => {
-  if (e.target.closest('button, .tab-btn, .filter-btn, .font-pill, .preset-dot, .crown-row, tr, .toggle-switch')) {
-    playClick();
-  }
-}, true);
-
-// Restore saved sound prefs
-(function() {
-  const savedSound = localStorage.getItem('jra-sound');
-  const savedVol   = localStorage.getItem('jra-volume');
-  if (savedVol) { soundVolume = parseFloat(savedVol); document.getElementById('volumeSlider').value = soundVolume; }
-  if (savedSound === '1') {
-    // Don't auto-enable — browser will block audio until user gesture
-    // Just restore toggle state visually
-  }
-})();
 
 // ── Restore saved preferences ─────────────────────────────────────────────────
 (function() {
