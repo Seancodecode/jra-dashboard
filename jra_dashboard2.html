@@ -437,6 +437,12 @@
     color: var(--accent);
   }
 
+  .volume-slider {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
   .color-wheel-wrap {
     display: flex;
     align-items: center;
@@ -670,6 +676,14 @@
   <div>
     <div class="header-title">JRA GRADED RACES</div>
     <div class="header-sub">Japan Racing Association, 1986 to 2025, Historical Database</div>
+    <div style="margin-top:0.4rem">
+      <a href="https://www.kaggle.com/datasets/takamotoki/jra-horse-racing-dataset" target="_blank"
+         style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);text-decoration:none;
+                border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:1px;transition:color 0.2s;"
+         onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+        📦 Dataset by takamotoki on Kaggle
+      </a>
+    </div>
   </div>
   <div class="header-stats">
     <div>
@@ -769,6 +783,7 @@
       <button class="tab-btn" onclick="switchTab('earn-j',this)">Earnings, Jockeys</button>
       <button class="tab-btn" onclick="switchTab('top-h',this)">Top 5 G1 Horses by Year</button>
       <button class="tab-btn" onclick="switchTab('top-j',this)">Top 5 G1 Jockeys by Year</button>
+      <a href="blnano.html" class="tab-btn" style="text-decoration: none; color: var(--g1); margin-left: auto; border-bottom: 2px solid transparent;" target="_blank">G1 Winner Pedigree Map ↗</a>
     </div>
 
     <div class="tab-pane active" id="tab-wins">
@@ -1043,6 +1058,7 @@
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
 let soundEnabled = true;
+let globalVolume = 0.5;
 let customScrollBuffer = null;
 let customClickBuffer = null;
 let lastScrollTime = 0;
@@ -1062,7 +1078,7 @@ function playNote(freq, type, duration, vol=0.1) {
   const gain = audioCtx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.setValueAtTime(vol * globalVolume, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
@@ -1075,7 +1091,7 @@ function playCustomBuffer(buffer, vol=0.2) {
   const source = audioCtx.createBufferSource();
   const gain = audioCtx.createGain();
   source.buffer = buffer;
-  gain.gain.value = vol;
+  gain.gain.value = vol * globalVolume;
   source.connect(gain);
   gain.connect(audioCtx.destination);
   source.start();
@@ -1105,28 +1121,16 @@ function playClickSound() {
   }
 }
 
-function playFanfare() {
-  if (!soundEnabled) return;
-  initAudio();
-  const notes = [
-    {f: 523.25, d: 0.2},
-    {f: 523.25, d: 0.2},
-    {f: 523.25, d: 0.4},
-    {f: 659.25, d: 0.4},
-    {f: 783.99, d: 0.6},
-  ];
-  let timeOffset = 0;
-  notes.forEach(n => {
-    setTimeout(() => playNote(n.f, 'square', n.d, 0.1), timeOffset * 1000);
-    timeOffset += n.d;
-  });
-}
-
 function toggleAudioMaster() {
   soundEnabled = !soundEnabled;
   document.getElementById('audioToggle').classList.toggle('on', soundEnabled);
   localStorage.setItem('jra-sound', soundEnabled ? 'on' : 'off');
   if (soundEnabled) initAudio();
+}
+
+function updateVolume(val) {
+  globalVolume = parseFloat(val);
+  localStorage.setItem('jra-volume', globalVolume);
 }
 
 async function handleAudioUpload(event, type) {
@@ -1246,7 +1250,6 @@ function showLoading(msg) {
 function hideLoading() {
   const el = document.getElementById('loadingOverlay');
   if (el) el.style.display = 'none';
-  playFanfare(); 
   setTimeout(attachSoundListeners, 100); 
 }
 
@@ -1781,6 +1784,11 @@ window.addEventListener("DOMContentLoaded", () => {
       </div>
     </div>
     
+    <div style="margin-bottom:0.8rem;">
+      <span style="font-size:0.7rem;color:var(--muted)">Volume</span>
+      <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.05" value="0.5" onchange="updateVolume(this.value)" oninput="updateVolume(this.value)">
+    </div>
+
     <div style="display:flex;gap:0.4rem;flex-direction:column;">
       <div class="drop-zone" id="dropScroll" onclick="document.getElementById('fileScroll').click()">
         <span id="labelScroll">Drop Scroll Sound (.wav, .mp3)</span>
@@ -1915,6 +1923,13 @@ function setFont(key, family) {
   if (savedSound === 'off') {
     soundEnabled = false;
     document.getElementById('audioToggle').classList.remove('on');
+  }
+
+  const savedVol = localStorage.getItem('jra-volume');
+  if (savedVol !== null) {
+    globalVolume = parseFloat(savedVol);
+    const slider = document.getElementById('volumeSlider');
+    if(slider) slider.value = globalVolume;
   }
 
   const savedFont = localStorage.getItem('jra-font');
