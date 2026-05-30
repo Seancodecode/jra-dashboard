@@ -693,7 +693,7 @@
 <header>
   <div>
     <div class="header-title">JRA GRADED RACES</div>
-    <div class="header-sub">Japan Racing Association · 1986–2021 · Historical Database</div>
+    <div class="header-sub">Japan Racing Association · 1986–2025 · Historical Database</div>
     <div style="margin-top:0.4rem">
       <a href="https://www.kaggle.com/datasets/takamotoki/jra-horse-racing-dataset" target="_blank"
          style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);text-decoration:none;
@@ -753,10 +753,10 @@
       <canvas id="prizeChart" style="width:100%;height:90px;display:block;cursor:crosshair"></canvas>
       <div style="display:flex;justify-content:space-between;margin-top:3px">
         <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted)">1986</span>
-        <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--accent)">2021 *</span>
+        <span style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--accent)">2025</span>
       </div>
       <div style="font-family:'DM Mono',monospace;font-size:0.5rem;color:var(--muted);margin-top:2px">
-        * Dataset ends July 2021 — partial year
+        1986–2025 · Graded races only
       </div>
     </div>
 
@@ -787,7 +787,7 @@
         <div id="prizeTooltip" style="font-family:'DM Mono',monospace;font-size:0.7rem;
              color:var(--muted);margin-top:0.8rem;min-height:1.2em;text-align:center"></div>
         <div style="font-family:'DM Mono',monospace;font-size:0.55rem;color:var(--muted);margin-top:0.5rem">
-          * Dataset ends July 2021 — partial year figure
+          1986–2025 · Graded races only figure
         </div>
       </div>
     </div>
@@ -1187,12 +1187,12 @@ async function loadDashboard() {
     });
 
     // Year wins for charts (top 8 horses and jockeys)
-    const top8Horses = topHorses.slice(0,8).map(h => h.name);
-    const top8Jockeys = topJockeys.slice(0,8).map(j => j.name);
+    const top5Horses = topHorses.slice(0,5).map(h => h.name);
+    const top5Jockeys = topJockeys.slice(0,5).map(j => j.name);
     const allYears = [...new Set(allRaces.map(r => +r.race_date?.slice(0,4)))].filter(Boolean).sort();
 
     const horseYearWins = {};
-    top8Horses.forEach(h => {
+    top5Horses.forEach(h => {
       horseYearWins[h] = {};
       allYears.forEach(y => horseYearWins[h][y] = 0);
     });
@@ -1202,7 +1202,7 @@ async function loadDashboard() {
     });
 
     const jockeyYearWins = {};
-    top8Jockeys.forEach(j => {
+    top5Jockeys.forEach(j => {
       jockeyYearWins[j] = {};
       allYears.forEach(y => jockeyYearWins[j][y] = 0);
     });
@@ -1275,13 +1275,13 @@ async function loadDashboard() {
     // Update year charts
     // Assign to window so chart functions can access them
     window.CHART_YEARS  = allYears;
-    window.TOP_HORSES   = top8Horses;
-    window.TOP_JOCKEYS  = top8Jockeys;
+    window.TOP_HORSES   = top5Horses;
+    window.TOP_JOCKEYS  = top5Jockeys;
     window.HORSE_YWINS  = horseYearWins;
     window.JOCKEY_YWINS = jockeyYearWins;
 
-    buildLegend('horseLegend', top8Horses, horseHidden, CHART_COLORS, drawHorseChart);
-    buildLegend('jockeyLegend', top8Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
+    buildLegend('horseLegend', top5Horses, horseHidden, CHART_COLORS, drawHorseChart);
+    buildLegend('jockeyLegend', top5Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
 
     // Build G1 table
     window.DATA = { recent_g1: g1Table };
@@ -1627,9 +1627,14 @@ window.addEventListener('resize', () => {
 
 // ── Results table ──
 function oddsClass(o) {
+  if (!o || o === 0) return 'odds-mid';
   if (o <= 3) return 'odds-low';
   if (o >= 20) return 'odds-high';
   return 'odds-mid';
+}
+function oddsLabel(o) {
+  if (!o || o === 0) return 'N/A';
+  return o + 'x';
 }
 
 // ── Pre-render all rows once, then show/hide with CSS ──────────────────────────
