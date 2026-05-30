@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JRA Graded Races - 1986 to 2021</title>
+<title>JRA Graded Races - 1986 to 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600&family=Playfair+Display:wght@400;600&family=Syne:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -325,11 +325,12 @@
     font-family: 'DM Mono', monospace; 
     font-size: 0.8rem;
     cursor: pointer; 
-    transition: border-color 0.2s, color 0.2s;
+    transition: border-color 0.2s, color 0.2s, transform 0.1s;
   }
   .year-btn:hover { 
     border-color: var(--accent); 
     color: var(--accent); 
+    transform: translateY(-2px);
   }
   .ranking-list { 
     display: flex; 
@@ -343,6 +344,11 @@
     background: var(--surface2); 
     border-radius: 8px;
     border: 1px solid var(--border);
+    transition: transform 0.1s;
+  }
+  .ranking-row:hover {
+    transform: translateX(4px);
+    border-color: rgba(255,255,255,0.15);
   }
 
   /* SETTINGS PANEL */
@@ -641,7 +647,7 @@
 <header>
   <div>
     <div class="header-title">JRA GRADED RACES</div>
-    <div class="header-sub">Japan Racing Association, 1986 to 2025, Historical Database</div>
+    <div class="header-sub">Japan Racing Association · 1986–2025 · Historical Database</div>
     <div style="margin-top:0.4rem">
       <a href="https://www.kaggle.com/datasets/takamotoki/jra-horse-racing-dataset" target="_blank"
          style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);text-decoration:none;
@@ -653,19 +659,19 @@
   </div>
   <div class="header-stats">
     <div>
-      <div class="hstat-val">4,250</div>
+      <div class="hstat-val" id="statTotalRaces">-</div>
       <div class="hstat-lbl">Total Races</div>
     </div>
     <div>
-      <div class="hstat-val">14,939</div>
+      <div class="hstat-val" id="statTotalHorses">-</div>
       <div class="hstat-lbl">Horses</div>
     </div>
     <div>
-      <div class="hstat-val">802</div>
+      <div class="hstat-val" id="statTotalJockeys">-</div>
       <div class="hstat-lbl">Jockeys</div>
     </div>
     <div>
-      <div class="hstat-val">35</div>
+      <div class="hstat-val" id="statTotalYears">-</div>
       <div class="hstat-lbl">Years</div>
     </div>
   </div>
@@ -677,10 +683,10 @@
   <div class="card" style="margin-bottom:1.5rem">
     <div class="card-title">Races by Grade</div>
     <div class="grade-row">
-      <div class="grade-pill g1"><div class="grade-pill-num">715</div><div class="grade-pill-lbl">G1</div></div>
-      <div class="grade-pill g2"><div class="grade-pill-num">1,159</div><div class="grade-pill-lbl">G2</div></div>
-      <div class="grade-pill g3"><div class="grade-pill-num">2,238</div><div class="grade-pill-lbl">G3</div></div>
-      <div class="grade-pill listed"><div class="grade-pill-num">138</div><div class="grade-pill-lbl">Listed</div></div>
+      <div class="grade-pill g1"><div class="grade-pill-num">-</div><div class="grade-pill-lbl">G1</div></div>
+      <div class="grade-pill g2"><div class="grade-pill-num">-</div><div class="grade-pill-lbl">G2</div></div>
+      <div class="grade-pill g3"><div class="grade-pill-num">-</div><div class="grade-pill-lbl">G3</div></div>
+      <div class="grade-pill listed"><div class="grade-pill-num">-</div><div class="grade-pill-lbl">Listed</div></div>
     </div>
     <div style="margin-top:1.5rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem">
@@ -717,7 +723,7 @@
               Prize Pool, Graded Race Winners
             </div>
             <div style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);margin-top:0.2rem">
-              Total prize money distributed to winners of graded races, ¥100M JPY, 1986 to 2021*
+              Total prize money distributed to winners of graded races
             </div>
           </div>
           <button onclick="togglePrizeExpand()"
@@ -728,7 +734,7 @@
         <canvas id="prizeChartLarge" style="width:100%;height:300px;display:block;cursor:crosshair"></canvas>
         <div style="display:flex;justify-content:space-between;margin-top:6px">
           <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--muted)">1986</span>
-          <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--accent)">2021 *</span>
+          <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--accent)">2025</span>
         </div>
         <div id="prizeTooltip" style="font-family:'DM Mono',monospace;font-size:0.7rem;
              color:var(--muted);margin-top:0.8rem;min-height:1.2em;text-align:center"></div>
@@ -811,7 +817,7 @@
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:0.8rem;color:var(--muted)">Dataset span</span>
-          <span style="font-weight:600;color:var(--g1)">1986-01-05 to 2021-07-25</span>
+          <span style="font-weight:600;color:var(--g1)">1986-01-05 to 2025-07-20</span>
         </div>
       </div>
     </div>
@@ -957,13 +963,13 @@
           <div class="crown-badge in">In Dataset</div>
         </div>
 
-        <div class="crown-row post-era">
+        <div class="crown-row">
           <div class="crown-num">7th</div>
           <div class="crown-info">
             <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2020103656/" target="_blank" class="horse-link">Liberty Island</a></div>
             <div class="crown-year">2023, Post-dataset, Died April 2025</div>
           </div>
-          <div class="crown-badge post">Post-2021</div>
+          <div class="crown-badge in">In Dataset</div>
         </div>
 
       </div>
@@ -1020,6 +1026,71 @@
 </div>
 
 <script>
+// --- AUDIO SYSTEM ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+function playNote(freq, type, duration, vol=0.1) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function playHoverSound() {
+  initAudio();
+  playNote(400, 'sine', 0.1, 0.05);
+}
+
+function playClickSound() {
+  initAudio();
+  playNote(600, 'triangle', 0.15, 0.08);
+}
+
+function playFanfare() {
+  initAudio();
+  // Very simplified racing fanfare using oscillators
+  const notes = [
+    {f: 523.25, d: 0.2}, // C5
+    {f: 523.25, d: 0.2}, // C5
+    {f: 523.25, d: 0.4}, // C5
+    {f: 659.25, d: 0.4}, // E5
+    {f: 783.99, d: 0.6}, // G5
+  ];
+  let timeOffset = 0;
+  notes.forEach(n => {
+    setTimeout(() => playNote(n.f, 'square', n.d, 0.1), timeOffset * 1000);
+    timeOffset += n.d;
+  });
+}
+
+function attachSoundListeners() {
+  document.querySelectorAll('button, .year-btn, .tab-btn, .filter-btn, .horse-link').forEach(el => {
+    el.addEventListener('mouseenter', playHoverSound);
+    el.addEventListener('click', playClickSound);
+  });
+}
+
+document.addEventListener('click', initAudio, { once: true });
+document.addEventListener('keydown', initAudio, { once: true });
+
+
 let ALL_YEARS = [];
 let TOP5_BY_YEAR = {};
 
@@ -1063,6 +1134,8 @@ function showLoading(msg) {
 function hideLoading() {
   const el = document.getElementById('loadingOverlay');
   if (el) el.style.display = 'none';
+  playFanfare(); // Play fanfare when loading finishes
+  setTimeout(attachSoundListeners, 100); // Re-attach sound listeners to new DOM elements
 }
 
 // Main data loader
@@ -1084,6 +1157,11 @@ async function loadDashboard() {
     // Grade counts
     showLoading('Loading race data...');
     const allRaces = await sbFetchAll('races', 'race_id,grade,race_date,prize_10k_jpy,rank,horse_name,jockey_name,trainer_name,venue,distance_m,win_odds,surface,race_name');
+
+    // Dynamically update the header stats
+    document.getElementById('statTotalRaces').textContent = allRaces.length.toLocaleString();
+    document.getElementById('statTotalHorses').textContent = totalHorses.toLocaleString();
+    document.getElementById('statTotalJockeys').textContent = totalJockeys.toLocaleString();
 
     // Process data client-side
     const winners = allRaces.filter(r => r.rank === 1);
@@ -1136,6 +1214,9 @@ async function loadDashboard() {
     // Group Top 5 G1 winners per year for the new tabs
     ALL_YEARS = [...new Set(allRaces.map(r => +r.race_date?.slice(0,4)))].filter(Boolean).sort();
     
+    // Update the dynamic total years stat
+    document.getElementById('statTotalYears').textContent = ALL_YEARS.length;
+
     const g1ByYear = {};
     ALL_YEARS.forEach(y => g1ByYear[y] = { horses: {}, jockeys: {} });
 
@@ -1174,9 +1255,6 @@ async function loadDashboard() {
     winners.forEach(r => { venueWins[r.venue] = (venueWins[r.venue]||0) + 1; });
     const venueData = Object.entries(venueWins).sort((a,b) => b[1]-a[1])
       .map(([venue,wins]) => ({venue,wins}));
-
-    // Update header stats
-    document.querySelector('.hstat-val:nth-child(1)').textContent = uniqueRaces.size.toLocaleString();
 
     // Update grade pills
     const gradePills = document.querySelectorAll('.grade-pill-num');
@@ -1635,23 +1713,23 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
     <div class="font-pills">
       <button class="font-pill active" onclick="setFont('dm','DM Sans')" id="font-dm">
         <span class="font-pill-name" style="font-family:'DM Sans'">DM Sans</span>
-        <span class="font-pill-sample" style="font-family:'DM Sans'">Clean, Modern, Default</span>
+        <span class="font-pill-sample" style="font-family:'DM Sans'">Clean · Modern · Default</span>
       </button>
       <button class="font-pill" onclick="setFont('grotesk','Space Grotesk')" id="font-grotesk">
         <span class="font-pill-name" style="font-family:'Space Grotesk'">Space Grotesk</span>
-        <span class="font-pill-sample" style="font-family:'Space Grotesk'">Geometric, Technical</span>
+        <span class="font-pill-sample" style="font-family:'Space Grotesk'">Geometric · Technical</span>
       </button>
       <button class="font-pill" onclick="setFont('playfair','Playfair Display')" id="font-playfair">
         <span class="font-pill-name" style="font-family:'Playfair Display'">Playfair Display</span>
-        <span class="font-pill-sample" style="font-family:'Playfair Display'">Elegant, Editorial</span>
+        <span class="font-pill-sample" style="font-family:'Playfair Display'">Elegant · Editorial</span>
       </button>
       <button class="font-pill" onclick="setFont('syne','Syne')" id="font-syne">
         <span class="font-pill-name" style="font-family:'Syne'">Syne</span>
-        <span class="font-pill-sample" style="font-family:'Syne'">Bold, Expressive</span>
+        <span class="font-pill-sample" style="font-family:'Syne'">Bold · Expressive</span>
       </button>
       <button class="font-pill" onclick="setFont('ibm','IBM Plex Sans')" id="font-ibm">
         <span class="font-pill-name" style="font-family:'IBM Plex Sans'">IBM Plex Sans</span>
-        <span class="font-pill-sample" style="font-family:'IBM Plex Sans'">Sharp, Technical</span>
+        <span class="font-pill-sample" style="font-family:'IBM Plex Sans'">Sharp · Technical</span>
       </button>
     </div>
   </div>
