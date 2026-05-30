@@ -887,12 +887,325 @@
     box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 1px 0 rgba(255,255,255,0.9) inset;
   }
 
+  /* ===== RACE CALENDAR ===== */
+  :root {
+    --cal-g1: #1e9bff;   /* bright blue  */
+    --cal-g2: #ff2e4d;   /* bright red   */
+    --cal-g3: #19e57a;   /* bright green */
+  }
+  body.light {
+    --cal-g1: #0a74d6;
+    --cal-g2: #e01030;
+    --cal-g3: #06a84e;
+  }
+
+  .cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .cal-nav { display: flex; align-items: center; gap: 0.6rem; }
+  .cal-nav-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .cal-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cal-month {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    letter-spacing: 2px;
+    min-width: 200px;
+    text-align: center;
+  }
+  .cal-today-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.35rem 0.8rem;
+    border-radius: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .cal-today-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cal-legend { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .cal-legend-item {
+    display: flex; align-items: center; gap: 0.4rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+  .cal-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .cal-dow {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    padding-bottom: 0.3rem;
+  }
+  .cal-cell {
+    position: relative;
+    min-height: 62px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface2);
+    padding: 5px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: border-color 0.15s, transform 0.1s, background 0.15s;
+    overflow: hidden;
+  }
+  .cal-cell.blank { background: transparent; border-color: transparent; }
+  .cal-cell.has-race { cursor: pointer; }
+  .cal-cell.has-race::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--cell-accent, var(--accent));
+  }
+  .cal-cell.top-g1 { --cell-accent: var(--cal-g1); }
+  .cal-cell.top-g2 { --cell-accent: var(--cal-g2); }
+  .cal-cell.top-g3 { --cell-accent: var(--cal-g3); }
+  .cal-cell.has-race:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.2); }
+  .cal-cell.is-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cal-cell.is-past { opacity: 0.42; }
+  .cal-daynum {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .cal-cell.is-today .cal-daynum { color: var(--accent); font-weight: 600; }
+  .cal-race-chip {
+    font-size: 0.56rem;
+    line-height: 1.15;
+    padding: 2px 4px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+  }
+  .cal-race-chip.g1 { background: color-mix(in srgb, var(--cal-g1) 18%, transparent); color: var(--cal-g1); border: 1px solid color-mix(in srgb, var(--cal-g1) 45%, transparent); }
+  .cal-race-chip.g2 { background: color-mix(in srgb, var(--cal-g2) 18%, transparent); color: var(--cal-g2); border: 1px solid color-mix(in srgb, var(--cal-g2) 45%, transparent); }
+  .cal-race-chip.g3 { background: color-mix(in srgb, var(--cal-g3) 18%, transparent); color: var(--cal-g3); border: 1px solid color-mix(in srgb, var(--cal-g3) 45%, transparent); }
+  .cal-more { font-size: 0.52rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  /* Day detail popover */
+  #calPopover {
+    position: fixed;
+    z-index: 2500;
+    width: 280px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    display: none;
+  }
+  #calPopover .pop-date {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 1.5px;
+    margin-bottom: 0.6rem;
+    color: #fff;
+  }
+  body.light #calPopover .pop-date { color: var(--text); }
+  #calPopover .pop-race {
+    display: block;
+    text-decoration: none;
+    padding: 0.45rem 0.55rem;
+    border-radius: 7px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    margin-bottom: 0.4rem;
+    transition: border-color 0.15s;
+  }
+  #calPopover .pop-race:hover { border-color: rgba(255,255,255,0.22); }
+  #calPopover .pop-race-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.15rem; }
+  #calPopover .pop-grade {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.55rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  #calPopover .pop-grade.g1 { background: color-mix(in srgb, var(--cal-g1) 20%, transparent); color: var(--cal-g1); }
+  #calPopover .pop-grade.g2 { background: color-mix(in srgb, var(--cal-g2) 20%, transparent); color: var(--cal-g2); }
+  #calPopover .pop-grade.g3 { background: color-mix(in srgb, var(--cal-g3) 20%, transparent); color: var(--cal-g3); }
+  #calPopover .pop-name { font-size: 0.78rem; color: var(--text); font-weight: 500; }
+  #calPopover .pop-meta { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); margin-top: 0.1rem; }
+  #calPopover .pop-foot { font-family: 'DM Mono', monospace; font-size: 0.55rem; color: var(--muted); margin-top: 0.4rem; text-align: right; }
+
+  /* ===== COLLAPSIBLE ALL-TIME SECTION ===== */
+  .leaders-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .collapse-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .collapse-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .collapse-btn .chev { transition: transform 0.25s ease; display: inline-block; }
+  .leaders-card.collapsed .collapse-btn .chev { transform: rotate(-90deg); }
+  .leaders-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .leaders-body {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.25s ease, margin 0.25s ease;
+    max-height: 2000px;
+    opacity: 1;
+  }
+  .leaders-card.collapsed .leaders-body {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+  }
+
+  /* Horizontal sliding tab bar */
+  .tab-scroll-wrap { display: flex; align-items: stretch; gap: 0; position: relative; }
+  .tab-scroll-btn {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    width: 24px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+    z-index: 2;
+  }
+  .tab-scroll-btn:hover { color: var(--accent); }
+  .tab-scroll-btn.show { display: flex; }
+  .tab-bar.scrollable {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+    flex: 1;
+  }
+  .tab-bar.scrollable::-webkit-scrollbar { display: none; }
+
+  /* ===== FILTER ICON + POPOUT ===== */
+  .filter-wrap { position: relative; flex-shrink: 0; }
+  .filter-icon-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+  }
+  .filter-icon-btn:hover, .filter-icon-btn.has-active { border-color: var(--accent); color: var(--accent); }
+  .filter-icon-btn .fcount {
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.55rem;
+    border-radius: 10px;
+    padding: 0 6px;
+    line-height: 1.5;
+  }
+  .filter-popout {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 220px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.5rem;
+    z-index: 1500;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    display: none;
+    flex-direction: column;
+    gap: 0.25rem;
+    animation: slideUp 0.18s ease;
+  }
+  .filter-popout.open { display: flex; }
+  .filter-opt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+    width: 100%;
+  }
+  .filter-opt:hover { background: var(--surface2); }
+  .filter-opt.active { border-color: var(--accent); color: var(--accent); background: rgba(232,51,90,0.08); }
+  .filter-opt .check { opacity: 0; font-size: 0.7rem; }
+  .filter-opt.active .check { opacity: 1; }
+  .filter-opt-divider { border: none; border-top: 1px solid var(--border); margin: 0.25rem 0.3rem; }
+
   @media (max-width: 900px) {
     .grid-4 { grid-template-columns: repeat(2,1fr); }
     .grid-3 { grid-template-columns: 1fr; }
     .grid-2 { grid-template-columns: 1fr; }
     header { flex-direction: column; gap: 1.5rem; align-items: flex-start; }
     .container { padding: 1.5rem; }
+    .cal-cell { min-height: 48px; }
+    .cal-race-chip { font-size: 0.5rem; }
   }
 </style>
 </head>
@@ -932,6 +1245,28 @@
 </header>
 
 <div class="container">
+
+  <div class="section-label">Upcoming Race Calendar</div>
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="cal-head">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="calShift(-1)" title="Previous month">‹</button>
+        <div class="cal-month" id="calMonthLabel">—</div>
+        <button class="cal-nav-btn" onclick="calShift(1)" title="Next month">›</button>
+        <button class="cal-today-btn" onclick="calGoToday()">Today</button>
+      </div>
+      <div class="cal-legend">
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--cal-g1)"></span>G1</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--cal-g2)"></span>G2</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--cal-g3)"></span>G3</div>
+      </div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div style="font-family:'DM Mono',monospace;font-size:0.55rem;color:var(--muted);margin-top:0.8rem">
+      Source: <a href="https://en.netkeiba.com/race/schedule.html" target="_blank" style="color:var(--muted);border-bottom:1px solid var(--border)">netkeiba 2026 Graded Stakes Schedule</a> · click a highlighted day for race details
+    </div>
+  </div>
+  <div id="calPopover"></div>
 
   <div class="section-label">Overview</div>
   <div class="card" style="margin-bottom:1.5rem">
@@ -1000,16 +1335,25 @@
   </div>
 
   <div class="section-label">All-Time Leaders</div>
-  <div class="card" style="margin-bottom:1.5rem">
-    <div class="tab-bar">
-      <button class="tab-btn active" onclick="switchTab('wins',this)">G1 Wins, Jockeys</button>
-      <button class="tab-btn" onclick="switchTab('wins-h',this)">G1 Wins, Horses</button>
-      <button class="tab-btn" onclick="switchTab('wins-t',this)">G1 Wins, Trainers</button>
-      <button class="tab-btn" onclick="switchTab('earn-h',this)">Earnings, Horses</button>
-      <button class="tab-btn" onclick="switchTab('earn-j',this)">Earnings, Jockeys</button>
-      <button class="tab-btn" onclick="switchTab('top-h',this)">Top 5 G1 Horses by Year</button>
-      <button class="tab-btn" onclick="switchTab('top-j',this)">Top 5 G1 Jockeys by Year</button>
-      <a href="blnano.html" class="tab-btn" style="text-decoration: none; color: var(--g1); margin-left: auto; border-bottom: 2px solid transparent;" target="_blank">G1 Winner Pedigree Map ↗</a>
+  <div class="card leaders-card" id="leadersCard" style="margin-bottom:1.5rem">
+    <div class="leaders-head">
+      <button class="collapse-btn" onclick="toggleLeaders()" title="Collapse / expand"><span class="chev">&#9662;</span></button>
+      <span class="leaders-title">All-Time Leaders</span>
+    </div>
+    <div class="leaders-body" id="leadersBody">
+    <div class="tab-scroll-wrap">
+      <button class="tab-scroll-btn" id="tabScrollL" onclick="scrollTabs(-1)">&lsaquo;</button>
+      <div class="tab-bar scrollable" id="tabBar">
+        <button class="tab-btn active" onclick="switchTab('wins',this)">G1 Wins, Jockeys</button>
+        <button class="tab-btn" onclick="switchTab('wins-h',this)">G1 Wins, Horses</button>
+        <button class="tab-btn" onclick="switchTab('wins-t',this)">G1 Wins, Trainers</button>
+        <button class="tab-btn" onclick="switchTab('earn-h',this)">Earnings, Horses</button>
+        <button class="tab-btn" onclick="switchTab('earn-j',this)">Earnings, Jockeys</button>
+        <button class="tab-btn" onclick="switchTab('top-h',this)">Top 5 G1 Horses by Year</button>
+        <button class="tab-btn" onclick="switchTab('top-j',this)">Top 5 G1 Jockeys by Year</button>
+        <a href="blnano.html" class="tab-btn" style="text-decoration: none; color: var(--g1); margin-left: auto; border-bottom: 2px solid transparent;" target="_blank">G1 Winner Pedigree Map &#8599;</a>
+      </div>
+      <button class="tab-scroll-btn" id="tabScrollR" onclick="scrollTabs(1)">&rsaquo;</button>
     </div>
 
     <div class="tab-pane active" id="tab-wins">
@@ -1038,6 +1382,7 @@
     <div class="tab-pane" id="tab-top-j">
       <div class="card-title" style="margin-bottom:0.8rem">Select a year to see the top 5 G1 winning jockeys</div>
       <div class="year-grid" id="jockeyYearGrid"></div>
+    </div>
     </div>
   </div>
 
@@ -1236,13 +1581,23 @@
     <div class="search-bar">
       <span id="countLabel" style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted);white-space:nowrap">716 winners (incl. 1 dead heat)</span>
       <input class="search-input" id="searchInput" placeholder="Search race, horse, jockey..." oninput="filterTableDebounced()">
-      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
-      <button class="filter-btn" onclick="setFilter('turf',this)">Turf</button>
-      <button class="filter-btn" onclick="setFilter('dirt',this)">Dirt</button>
-      <button class="filter-btn" onclick="setFilter('sprint',this)">Sprint ≤1400</button>
-      <button class="filter-btn" onclick="setFilter('mile',this)">Mile 1401 to 1800</button>
-      <button class="filter-btn" onclick="setFilter('inter',this)">Intermediate 1801 to 2100</button>
-      <button class="filter-btn" onclick="setFilter('long',this)">Long 2101+</button>
+      <div class="filter-wrap">
+        <button class="filter-icon-btn" id="filterIconBtn" onclick="toggleFilterPopout(event)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+          <span id="filterLabel">Filter</span>
+        </button>
+        <div class="filter-popout" id="filterPopout">
+          <button class="filter-opt active" data-f="all" onclick="setFilter('all',this)">All<span class="check">&#10003;</span></button>
+          <hr class="filter-opt-divider">
+          <button class="filter-opt" data-f="turf" onclick="setFilter('turf',this)">Turf<span class="check">&#10003;</span></button>
+          <button class="filter-opt" data-f="dirt" onclick="setFilter('dirt',this)">Dirt<span class="check">&#10003;</span></button>
+          <hr class="filter-opt-divider">
+          <button class="filter-opt" data-f="sprint" onclick="setFilter('sprint',this)">Sprint &#8804;1400m<span class="check">&#10003;</span></button>
+          <button class="filter-opt" data-f="mile" onclick="setFilter('mile',this)">Mile 1401&ndash;1800m<span class="check">&#10003;</span></button>
+          <button class="filter-opt" data-f="inter" onclick="setFilter('inter',this)">Intermediate 1801&ndash;2100m<span class="check">&#10003;</span></button>
+          <button class="filter-opt" data-f="long" onclick="setFilter('long',this)">Long 2101m+<span class="check">&#10003;</span></button>
+        </div>
+      </div>
     </div>
     <div class="scroll-table" id="resultsScrollArea">
       <table class="results-table">
@@ -1418,7 +1773,7 @@ function setupDropZones() {
 }
 
 function attachSoundListeners() {
-  document.querySelectorAll('button, .year-btn, .tab-btn, .filter-btn, .horse-link').forEach(el => {
+  document.querySelectorAll('button, .year-btn, .tab-btn, .filter-icon-btn, .filter-opt, .cal-nav-btn, .cal-today-btn, .collapse-btn, .horse-link').forEach(el => {
     el.addEventListener('click', playClickSound);
   });
   
@@ -1949,10 +2304,313 @@ const filterTableDebounced = debounce(filterTable, 80);
 
 function setFilter(f, btn) {
   activeFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  document.querySelectorAll('.filter-opt').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  // reflect state on the filter icon
+  const labels = { all:'Filter', turf:'Turf', dirt:'Dirt', sprint:'Sprint', mile:'Mile', inter:'Intermediate', long:'Long' };
+  const lbl = document.getElementById('filterLabel');
+  const icon = document.getElementById('filterIconBtn');
+  if (lbl) lbl.textContent = labels[f] || 'Filter';
+  if (icon) icon.classList.toggle('has-active', f !== 'all');
+  closeFilterPopout();
   filterTable();
 }
+
+function toggleFilterPopout(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('filterPopout').classList.toggle('open');
+}
+function closeFilterPopout() {
+  const p = document.getElementById('filterPopout');
+  if (p) p.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.filter-wrap');
+  if (wrap && !wrap.contains(e.target)) closeFilterPopout();
+});
+
+/* ===== COLLAPSIBLE ALL-TIME SECTION ===== */
+function toggleLeaders() {
+  document.getElementById('leadersCard').classList.toggle('collapsed');
+}
+
+/* ===== HORIZONTAL SLIDING TAB BAR ===== */
+function scrollTabs(dir) {
+  const bar = document.getElementById('tabBar');
+  if (bar) bar.scrollBy({ left: dir * 200, behavior: 'smooth' });
+}
+function updateTabScrollBtns() {
+  const bar = document.getElementById('tabBar');
+  const l = document.getElementById('tabScrollL');
+  const r = document.getElementById('tabScrollR');
+  if (!bar || !l || !r) return;
+  const overflow = bar.scrollWidth > bar.clientWidth + 2;
+  l.classList.toggle('show', overflow && bar.scrollLeft > 2);
+  r.classList.toggle('show', overflow && bar.scrollLeft < bar.scrollWidth - bar.clientWidth - 2);
+}
+window.addEventListener('resize', updateTabScrollBtns);
+window.addEventListener('load', () => {
+  const bar = document.getElementById('tabBar');
+  if (bar) bar.addEventListener('scroll', updateTabScrollBtns, { passive: true });
+  updateTabScrollBtns();
+});
+
+/* ===== RACE CALENDAR (data sourced from netkeiba 2026 Graded Stakes Schedule) ===== */
+const TRACK_NAMES = { NAK:'Nakayama', KYT:'Kyoto', KOK:'Kokura', TKY:'Tokyo', HAN:'Hanshin',
+  FUK:'Fukushima', CHU:'Chukyo', HAK:'Hakodate', NIG:'Niigata', SAP:'Sapporo' };
+
+const GRADED_RACES_2026 = [
+  ["2026-01-04","G3","NAK","Nakayama Kimpai","T2000m"],
+  ["2026-01-04","G3","KYT","Kyoto Kimpai","T1600m"],
+  ["2026-01-11","G3","NAK","Fairy Stakes","T1600m"],
+  ["2026-01-12","G3","KYT","Shinzan Kinen","T1600m"],
+  ["2026-01-18","G3","NAK","Keisei Hai","T2000m"],
+  ["2026-01-18","G2","KYT","Nikkei Shinshun Hai","T2400m"],
+  ["2026-01-24","G3","KOK","Kokura Himba Stakes","T2000m"],
+  ["2026-01-25","G2","NAK","American Jockey Club Cup","T2200m"],
+  ["2026-01-25","G2","KYT","Procyon Stakes","D1800m"],
+  ["2026-02-01","G3","TKY","Negishi Stakes","D1400m"],
+  ["2026-02-01","G3","KYT","Silk Road Stakes","T1200m"],
+  ["2026-02-08","G3","TKY","Tokyo Shimbun Hai","T1600m"],
+  ["2026-02-08","G3","KYT","Kisaragi Sho","T1800m"],
+  ["2026-02-14","G3","TKY","Daily Hai Queen Cup","T1600m"],
+  ["2026-02-15","G3","TKY","Kyodo News Hai","T1800m"],
+  ["2026-02-15","G2","KYT","Kyoto Kinen","T2200m"],
+  ["2026-02-21","G3","TKY","Diamond Stakes","T3400m"],
+  ["2026-02-21","G3","HAN","Hankyu Hai","T1400m"],
+  ["2026-02-22","G1","TKY","February Stakes","D1600m"],
+  ["2026-02-22","G3","KOK","Kokura Daishoten","T1800m"],
+  ["2026-02-28","G3","NAK","Ocean Stakes","T1200m"],
+  ["2026-03-01","G2","NAK","Nakayama Kinen","T1800m"],
+  ["2026-03-01","G2","HAN","Tulip Sho","T1600m"],
+  ["2026-03-07","G3","NAK","Nakayama Himba Stakes","T1800m"],
+  ["2026-03-07","G2","HAN","Hochi Hai Fillies' Revue","T1400m"],
+  ["2026-03-08","G2","NAK","Yayoi Sho Deep Impact Kinen","T2000m"],
+  ["2026-03-15","G2","NAK","Spring Stakes","T1800m"],
+  ["2026-03-15","G2","CHU","Kinko Sho","T2000m"],
+  ["2026-03-21","G3","NAK","Flower Cup","T1800m"],
+  ["2026-03-21","G3","CHU","Falcon Stakes","T1400m"],
+  ["2026-03-22","G2","HAN","Hanshin Daishoten","T3000m"],
+  ["2026-03-22","G3","CHU","Aichi Hai","T1400m"],
+  ["2026-03-28","G2","NAK","Nikkei Sho","T2500m"],
+  ["2026-03-28","G3","HAN","Mainichi Hai","T1800m"],
+  ["2026-03-29","G3","NAK","March Stakes","D1800m"],
+  ["2026-03-29","G1","CHU","Takamatsunomiya Kinen","T1200m"],
+  ["2026-04-04","G3","NAK","Lord Derby Challenge Trophy","T1600m"],
+  ["2026-04-04","G3","HAN","Churchill Downs Cup","T1600m"],
+  ["2026-04-05","G1","HAN","Osaka Hai","T2000m"],
+  ["2026-04-11","G2","NAK","New Zealand Trophy","T1600m"],
+  ["2026-04-11","G2","HAN","Hanshin Himba Stakes","T1600m"],
+  ["2026-04-12","G1","HAN","Oka Sho (1000 Guineas)","T1600m"],
+  ["2026-04-18","G3","HAN","Antares Stakes","D1800m"],
+  ["2026-04-19","G1","NAK","Satsuki Sho (2000 Guineas)","T2000m"],
+  ["2026-04-19","G3","FUK","Fukushima Himba Stakes","T1800m"],
+  ["2026-04-25","G2","TKY","Aoba Sho","T2400m"],
+  ["2026-04-26","G2","TKY","Flora Stakes","T2000m"],
+  ["2026-04-26","G2","KYT","Yomiuri Milers Cup","T1600m"],
+  ["2026-05-02","G2","TKY","Keio Hai Spring Cup","T1400m"],
+  ["2026-05-02","G3","KYT","Unicorn Stakes","D1900m"],
+  ["2026-05-03","G1","KYT","Tenno Sho (Spring)","T3200m"],
+  ["2026-05-09","G3","TKY","Epsom Cup","T1800m"],
+  ["2026-05-09","G2","KYT","Kyoto Shimbun Hai","T2200m"],
+  ["2026-05-10","G1","TKY","NHK Mile Cup","T1600m"],
+  ["2026-05-16","G3","NIG","Niigata Daishoten","T2000m"],
+  ["2026-05-17","G1","TKY","Victoria Mile","T1600m"],
+  ["2026-05-23","G3","KYT","Heian Stakes","D1900m"],
+  ["2026-05-24","G1","TKY","Yushun Himba (Oaks)","T2400m"],
+  ["2026-05-30","G3","KYT","Aoi Stakes","T1200m"],
+  ["2026-05-31","G1","TKY","Tokyo Yushun (Derby)","T2400m"],
+  ["2026-05-31","G2","TKY","Meguro Kinen","T2500m"],
+  ["2026-06-07","G1","TKY","Yasuda Kinen","T1600m"],
+  ["2026-06-13","G3","HAK","Hakodate Sprint Stakes","T1200m"],
+  ["2026-06-14","G1","HAN","Takarazuka Kinen","T2200m"],
+  ["2026-06-21","G3","TKY","Fuchu Himba Stakes","T1800m"],
+  ["2026-06-21","G3","HAN","Shirasagi Stakes","T1600m"],
+  ["2026-06-28","G3","FUK","Radio Nikkei Sho","T1800m"],
+  ["2026-06-28","G3","HAK","Hakodate Kinen","T2000m"],
+  ["2026-07-05","G3","KOK","Kitakyushu Kinen","T1200m"],
+  ["2026-07-12","G3","FUK","Tanabata Sho","T2000m"],
+  ["2026-07-19","G3","KOK","Kokura Kinen","T2000m"],
+  ["2026-07-19","G3","HAK","Hakodate Nisai Stakes","T1200m"],
+  ["2026-07-26","G3","NIG","Sekiya Kinen","T1600m"],
+  ["2026-07-26","G3","CHU","Tokai Stakes","D1400m"],
+  ["2026-08-02","G3","NIG","Ibis Summer Dash","T1000m"],
+  ["2026-08-02","G3","SAP","Queen Stakes","T1800m"],
+  ["2026-08-08","G3","SAP","Elm Stakes","D1700m"],
+  ["2026-08-09","G3","NIG","Leopard Stakes","D1800m"],
+  ["2026-08-09","G3","CHU","CBC Sho","T1200m"],
+  ["2026-08-16","G3","CHU","Chukyo Kinen","T1600m"],
+  ["2026-08-16","G2","SAP","Sapporo Kinen","T2000m"],
+  ["2026-08-23","G3","NIG","Niigata Nisai Stakes","T1600m"],
+  ["2026-08-23","G3","SAP","Keeneland Cup","T1200m"],
+  ["2026-08-30","G3","NIG","Niigata Kinen","T2000m"],
+  ["2026-08-30","G3","CHU","Chukyo Nisai Stakes","T1400m"],
+  ["2026-09-05","G3","NAK","Keisei Hai Autumn Handicap","T1600m"],
+  ["2026-09-05","G3","SAP","Sapporo Nisai Stakes","T1800m"],
+  ["2026-09-06","G2","NAK","Shion Stakes","T2000m"],
+  ["2026-09-06","G2","HAN","Centaur Stakes","T1200m"],
+  ["2026-09-12","G3","HAN","Challenge Cup","T2000m"],
+  ["2026-09-13","G2","NAK","St.Lite Kinen","T2200m"],
+  ["2026-09-13","G2","HAN","Rose Stakes","T1800m"],
+  ["2026-09-20","G2","NAK","All Comers","T2200m"],
+  ["2026-09-21","G2","HAN","Kobe Shimbun Hai","T2400m"],
+  ["2026-09-26","G3","HAN","Sirius Stakes","D2000m"],
+  ["2026-09-27","G1","NAK","Sprinters Stakes","T1200m"],
+  ["2026-10-04","G2","TKY","Mainichi Okan","T1800m"],
+  ["2026-10-04","G2","KYT","Kyoto Daishoten","T2400m"],
+  ["2026-10-10","G3","TKY","Saudi Arabia Royal Cup","T1600m"],
+  ["2026-10-11","G2","TKY","Ireland Trophy","T1800m"],
+  ["2026-10-12","G2","KYT","Swan Stakes","T1400m"],
+  ["2026-10-17","G2","TKY","Fuji Stakes","T1600m"],
+  ["2026-10-18","G1","KYT","Shuka Sho","T2000m"],
+  ["2026-10-24","G3","TKY","Artemis Stakes","T1600m"],
+  ["2026-10-25","G1","KYT","Kikuka Sho (St. Leger)","T3000m"],
+  ["2026-10-30","G3","KYT","Fantasy Stakes","T1400m"],
+  ["2026-11-01","G1","TKY","Tenno Sho (Autumn)","T2000m"],
+  ["2026-11-07","G2","TKY","Keio Hai Nisai Stakes","T1400m"],
+  ["2026-11-08","G2","TKY","Copa Republica Argentina","T2500m"],
+  ["2026-11-08","G3","KYT","Miyako Stakes","D1800m"],
+  ["2026-11-14","G3","TKY","Musashino Stakes","D1600m"],
+  ["2026-11-14","G2","KYT","Daily Hai Nisai Stakes","T1600m"],
+  ["2026-11-15","G1","KYT","Queen Elizabeth 2 Cup","T2200m"],
+  ["2026-11-21","G3","FUK","Fukushima Kinen","T2000m"],
+  ["2026-11-22","G1","KYT","Mile Championship","T1600m"],
+  ["2026-11-23","G2","TKY","Tokyo Sports Hai Nisai Stakes","T1800m"],
+  ["2026-11-28","G3","KYT","Kyoto Nisai Stakes","T2000m"],
+  ["2026-11-29","G1","TKY","Japan Cup","T2400m"],
+  ["2026-11-29","G3","KYT","Keihan Hai","T1200m"],
+  ["2026-12-05","G2","NAK","Stayers Stakes","T3600m"],
+  ["2026-12-05","G3","HAN","Naruo Kinen","T1800m"],
+  ["2026-12-06","G1","CHU","Champions Cup","D1800m"],
+  ["2026-12-12","G3","CHU","Chunichi Shimbun Hai","T2000m"],
+  ["2026-12-13","G3","NAK","Capella Stakes","D1200m"],
+  ["2026-12-13","G1","HAN","Hanshin Juvenile Fillies","T1600m"],
+  ["2026-12-19","G3","NAK","Turquoise Stakes","T1600m"],
+  ["2026-12-20","G1","HAN","Asahi Hai Futurity Stakes","T1600m"],
+  ["2026-12-26","G1","NAK","Hopeful Stakes","T2000m"],
+  ["2026-12-26","G2","HAN","Hanshin Cup","T1400m"],
+  ["2026-12-27","G1","NAK","Arima Kinen","T2500m"]
+];
+
+// index races by date string
+const RACES_BY_DATE = {};
+GRADED_RACES_2026.forEach(r => {
+  const [d] = r;
+  (RACES_BY_DATE[d] = RACES_BY_DATE[d] || []).push({ grade:r[1], track:r[2], name:r[3], dist:r[4] });
+});
+// grade priority for cell ordering (G1 first)
+const GRADE_RANK = { G1:0, G2:1, G3:2 };
+Object.values(RACES_BY_DATE).forEach(list => list.sort((a,b) => GRADE_RANK[a.grade]-GRADE_RANK[b.grade]));
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let calYear, calMonth; // current view
+
+function fmtDate(y,m,d) {
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function buildCalendar() {
+  const grid = document.getElementById('calGrid');
+  const label = document.getElementById('calMonthLabel');
+  if (!grid) return;
+  label.textContent = `${MONTH_NAMES[calMonth]} ${calYear}`;
+
+  let html = DOW.map(d => `<div class="cal-dow">${d}</div>`).join('');
+
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+
+  for (let i = 0; i < firstDow; i++) html += `<div class="cal-cell blank"></div>`;
+
+  const now = new Date();
+  const todayStr = fmtDate(now.getFullYear(), now.getMonth(), now.getDate());
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = fmtDate(calYear, calMonth, d);
+    const races = RACES_BY_DATE[ds];
+    const isToday = ds === todayStr;
+    const isPast = ds < todayStr;
+    let cls = 'cal-cell';
+    if (races) cls += ' has-race top-' + races[0].grade.toLowerCase();
+    if (isToday) cls += ' is-today';
+    if (isPast) cls += ' is-past';
+
+    let inner = `<span class="cal-daynum">${d}</span>`;
+    if (races) {
+      const shown = races.slice(0,2);
+      shown.forEach(r => {
+        inner += `<span class="cal-race-chip ${r.grade.toLowerCase()}" title="${r.name}">${r.name}</span>`;
+      });
+      if (races.length > 2) inner += `<span class="cal-more">+${races.length-2} more</span>`;
+    }
+    const onclick = races ? ` onclick="showCalPopover(event,'${ds}')"` : '';
+    html += `<div class="${cls}" data-date="${ds}"${onclick}>${inner}</div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function calShift(delta) {
+  closeCalPopover();
+  calMonth += delta;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  buildCalendar();
+}
+function calGoToday() {
+  closeCalPopover();
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+  buildCalendar();
+}
+
+function showCalPopover(e, ds) {
+  e.stopPropagation();
+  const races = RACES_BY_DATE[ds];
+  if (!races) return;
+  const pop = document.getElementById('calPopover');
+  const [y,m,d] = ds.split('-').map(Number);
+  const dateObj = new Date(y, m-1, d);
+  const kaisai = ds.replace(/-/g,'');
+
+  let html = `<div class="pop-date">${DOW[dateObj.getDay()]}, ${MONTH_NAMES[m-1]} ${d}, ${y}</div>`;
+  races.forEach(r => {
+    const g = r.grade.toLowerCase();
+    html += `<a class="pop-race" href="https://en.netkeiba.com/race/race_list.html?kaisai_date=${kaisai}" target="_blank">
+      <div class="pop-race-top"><span class="pop-grade ${g}">${r.grade}</span><span class="pop-name">${r.name}</span></div>
+      <div class="pop-meta">${TRACK_NAMES[r.track]||r.track} &middot; ${r.dist}</div>
+    </a>`;
+  });
+  html += `<div class="pop-foot">View on netkeiba &#8599;</div>`;
+  pop.innerHTML = html;
+  pop.style.display = 'block';
+
+  // position near the clicked cell, kept within viewport
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pw = 280, ph = pop.offsetHeight;
+  let left = rect.left;
+  let top = rect.bottom + 8;
+  if (left + pw > window.innerWidth - 12) left = window.innerWidth - pw - 12;
+  if (top + ph > window.innerHeight - 12) top = rect.top - ph - 8;
+  if (top < 12) top = 12;
+  pop.style.left = Math.max(12,left) + 'px';
+  pop.style.top = top + 'px';
+}
+function closeCalPopover() {
+  const pop = document.getElementById('calPopover');
+  if (pop) pop.style.display = 'none';
+}
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('calPopover');
+  if (pop && pop.style.display === 'block' && !pop.contains(e.target) && !e.target.closest('.cal-cell')) {
+    closeCalPopover();
+  }
+});
+window.addEventListener('resize', closeCalPopover);
+
+calGoToday();
 
 window.addEventListener("DOMContentLoaded", () => {
   setupDropZones();
