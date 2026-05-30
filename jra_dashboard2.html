@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JRA Graded Races - 1986 to 2025</title>
+<title>JRA Graded Races, 1986 to 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600&family=Playfair+Display:wght@400;600&family=Syne:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -31,7 +31,6 @@
     overflow-x: hidden;
   }
 
-  /* HEADER */
   header {
     background: linear-gradient(135deg, #0a0a0f 0%, #1a0a1a 50%, #0a0a1a 100%);
     border-bottom: 1px solid var(--border);
@@ -85,14 +84,12 @@
     text-transform: uppercase;
   }
 
-  /* LAYOUT */
   .container { max-width: 1400px; margin: 0 auto; padding: 2rem 3rem; }
 
   .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
   .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
   .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
 
-  /* CARDS */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -117,7 +114,6 @@
     margin-bottom: 1rem;
   }
 
-  /* STAT TILES */
   .stat-tile {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -140,7 +136,6 @@
     text-transform: uppercase;
   }
 
-  /* BAR CHART */
   .bar-list { display: flex; flex-direction: column; gap: 0.55rem; }
   .bar-row { display: flex; align-items: center; gap: 0.8rem; }
   .bar-name {
@@ -174,7 +169,6 @@
     flex-shrink: 0;
   }
 
-  /* RANK BADGE */
   .rank-badge {
     font-family: 'DM Mono', monospace;
     font-size: 0.65rem;
@@ -188,7 +182,6 @@
   .rank-badge.top2 { color: var(--g2); }
   .rank-badge.top3 { color: var(--g3); }
 
-  /* VENUE DOTS */
   .venue-grid { display: flex; flex-direction: column; gap: 0.6rem; }
   .venue-row { display: flex; align-items: center; gap: 0.8rem; }
   .venue-dot {
@@ -201,7 +194,6 @@
   .venue-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3a7bd5, #6ab0f5); }
   .venue-val { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--muted); width: 40px; text-align: right; }
 
-  /* GRADE PILLS */
   .grade-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
   .grade-pill {
     display: flex; flex-direction: column; align-items: center;
@@ -221,7 +213,6 @@
   .grade-pill.listed .grade-pill-num { color: var(--listed); }
   .grade-pill-lbl { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 0.2rem; }
 
-  /* RESULTS TABLE */
   .results-table { width: 100%; border-collapse: collapse; }
   .results-table th {
     font-family: 'DM Mono', monospace;
@@ -310,7 +301,6 @@
   .crown-badge.pre { background: rgba(107,107,128,0.15); color: var(--muted); border: 1px solid var(--border); }
   .crown-badge.post { background: rgba(108,142,191,0.12); color: var(--listed); border: 1px solid rgba(108,142,191,0.25); }
 
-  /* YEAR GRID & RANKING MODAL */
   .year-grid { 
     display: flex; 
     flex-wrap: wrap; 
@@ -351,7 +341,6 @@
     border-color: rgba(255,255,255,0.15);
   }
 
-  /* SETTINGS PANEL */
   .settings-toggle {
     position: fixed;
     bottom: 2rem;
@@ -378,7 +367,7 @@
     position: fixed;
     bottom: 5.5rem;
     right: 2rem;
-    width: 260px;
+    width: 280px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -409,7 +398,27 @@
     text-transform: uppercase;
     letter-spacing: 1px;
   }
-  /* Color wheel */
+  
+  .drop-zone {
+    border: 1px dashed var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem;
+    text-align: center;
+    font-size: 0.65rem;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface2);
+    margin-bottom: 0.4rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
   .color-wheel-wrap {
     display: flex;
     align-items: center;
@@ -439,7 +448,6 @@
     width: 90px;
     outline: none;
   }
-  /* Color presets */
   .color-presets {
     display: flex;
     gap: 0.4rem;
@@ -454,7 +462,6 @@
     transition: border-color 0.2s, transform 0.2s;
   }
   .preset-dot:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.4); }
-  /* Font pills */
   .font-pills {
     display: flex;
     flex-direction: column;
@@ -482,7 +489,6 @@
     margin-top: 1px;
     display: block;
   }
-  /* Dark / Light toggle */
   .theme-toggle-row {
     display: flex;
     align-items: center;
@@ -516,7 +522,6 @@
     margin: 0.8rem 0;
   }
 
-  /* TABS */
   .tab-bar {
     display: flex;
     gap: 0.3rem;
@@ -544,7 +549,6 @@
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
 
-  /* SEARCH */
   .search-bar {
     display: flex;
     gap: 1rem;
@@ -647,7 +651,7 @@
 <header>
   <div>
     <div class="header-title">JRA GRADED RACES</div>
-    <div class="header-sub">Japan Racing Association · 1986–2025 · Historical Database</div>
+    <div class="header-sub">Japan Racing Association, 1986 to 2025, Historical Database</div>
     <div style="margin-top:0.4rem">
       <a href="https://www.kaggle.com/datasets/takamotoki/jra-horse-racing-dataset" target="_blank"
          style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);text-decoration:none;
@@ -755,7 +759,6 @@
       <button class="tab-btn" onclick="switchTab('earn-j',this)">Earnings, Jockeys</button>
       <button class="tab-btn" onclick="switchTab('top-h',this)">Top 5 G1 Horses by Year</button>
       <button class="tab-btn" onclick="switchTab('top-j',this)">Top 5 G1 Jockeys by Year</button>
-      <a href="blnano.html" class="tab-btn" style="text-decoration: none; color: var(--g1); margin-left: auto; border-bottom: 2px solid transparent;" target="_blank">G1 Winner Pedigree Map ↗</a>
     </div>
 
     <div class="tab-pane active" id="tab-wins">
@@ -860,7 +863,7 @@
         <div class="crown-row">
           <div class="crown-num">4th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/1981107017/" target="_blank" class="horse-link">Symboli Rudolf</a></div>
+            <div class="crown-name">Symboli Rudolf</div>
             <div class="crown-year">1984, "The Emperor", First unbeaten TC winner</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -869,7 +872,7 @@
         <div class="crown-row">
           <div class="crown-num">5th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/1991108889/" target="_blank" class="horse-link">Narita Brian</a></div>
+            <div class="crown-name">Narita Brian</div>
             <div class="crown-year">1994, "Shadow Roll Monster", 9 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -878,7 +881,7 @@
         <div class="crown-row">
           <div class="crown-num">6th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2002100816/" target="_blank" class="horse-link">Deep Impact</a></div>
+            <div class="crown-name">Deep Impact</div>
             <div class="crown-year">2005, "Pegasus", 10 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -887,7 +890,7 @@
         <div class="crown-row">
           <div class="crown-num">7th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2008102636/" target="_blank" class="horse-link">Orfevre</a></div>
+            <div class="crown-name">Orfevre</div>
             <div class="crown-year">2011, 2x Arc runner-up, 9 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -896,7 +899,7 @@
         <div class="crown-row">
           <div class="crown-num">8th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2017101835/" target="_blank" class="horse-link">Contrail</a></div>
+            <div class="crown-name">Contrail</div>
             <div class="crown-year">2020, Unbeaten TC, Son of Deep Impact, 6 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -912,7 +915,7 @@
         <div class="crown-row">
           <div class="crown-num">1st</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/1983103914/" target="_blank" class="horse-link">Mejiro Ramonu</a></div>
+            <div class="crown-name">Mejiro Ramonu</div>
             <div class="crown-year">1986, First ever Triple Tiara, 6 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -921,7 +924,7 @@
         <div class="crown-row">
           <div class="crown-num">2nd</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2000106022/" target="_blank" class="horse-link">Still in Love</a></div>
+            <div class="crown-name">Still in Love</div>
             <div class="crown-year">2003, 3 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -930,7 +933,7 @@
         <div class="crown-row">
           <div class="crown-num">3rd</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2007103234/" target="_blank" class="horse-link">Apapane</a></div>
+            <div class="crown-name">Apapane</div>
             <div class="crown-year">2010, First G1 dead heat in history, 5 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -939,7 +942,7 @@
         <div class="crown-row">
           <div class="crown-num">4th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2009106253/" target="_blank" class="horse-link">Gentildonna</a></div>
+            <div class="crown-name">Gentildonna</div>
             <div class="crown-year">2012, 2x Japan Cup, 2x Horse of the Year, 8 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -948,7 +951,7 @@
         <div class="crown-row">
           <div class="crown-num">5th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2015104961/" target="_blank" class="horse-link">Almond Eye</a></div>
+            <div class="crown-name">Almond Eye</div>
             <div class="crown-year">2018, 2x Horse of the Year, World #1 2020, 9 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -957,7 +960,7 @@
         <div class="crown-row">
           <div class="crown-num">6th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2017100720/" target="_blank" class="horse-link">Daring Tact</a></div>
+            <div class="crown-name">Daring Tact</div>
             <div class="crown-year">2020, Unbeaten Triple Tiara, 3 graded wins</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -966,7 +969,7 @@
         <div class="crown-row">
           <div class="crown-num">7th</div>
           <div class="crown-info">
-            <div class="crown-name"><a href="https://en.netkeiba.com/db/horse/2020103656/" target="_blank" class="horse-link">Liberty Island</a></div>
+            <div class="crown-name">Liberty Island</div>
             <div class="crown-year">2023, Post-dataset, Died April 2025</div>
           </div>
           <div class="crown-badge in">In Dataset</div>
@@ -1029,18 +1032,21 @@
 // --- AUDIO SYSTEM ---
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
+let soundEnabled = true;
+let customHoverBuffer = null;
+let customClickBuffer = null;
 
 function initAudio() {
   if (!audioCtx) {
     audioCtx = new AudioContext();
   }
-  if (audioCtx.state === 'suspended') {
+  if (audioCtx.state === 'suspended' && soundEnabled) {
     audioCtx.resume();
   }
 }
 
 function playNote(freq, type, duration, vol=0.1) {
-  if (!audioCtx) return;
+  if (!audioCtx || !soundEnabled) return;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.type = type;
@@ -1053,30 +1059,101 @@ function playNote(freq, type, duration, vol=0.1) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
+function playCustomBuffer(buffer, vol=0.2) {
+  if (!audioCtx || !soundEnabled) return;
+  const source = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  source.buffer = buffer;
+  gain.gain.value = vol;
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.start();
+}
+
 function playHoverSound() {
+  if (!soundEnabled) return;
   initAudio();
-  playNote(400, 'sine', 0.1, 0.05);
+  if (customHoverBuffer) {
+    playCustomBuffer(customHoverBuffer, 0.2);
+  } else {
+    playNote(400, 'sine', 0.1, 0.05);
+  }
 }
 
 function playClickSound() {
+  if (!soundEnabled) return;
   initAudio();
-  playNote(600, 'triangle', 0.15, 0.08);
+  if (customClickBuffer) {
+    playCustomBuffer(customClickBuffer, 0.3);
+  } else {
+    playNote(600, 'triangle', 0.15, 0.08);
+  }
 }
 
 function playFanfare() {
+  if (!soundEnabled) return;
   initAudio();
-  // Very simplified racing fanfare using oscillators
   const notes = [
-    {f: 523.25, d: 0.2}, // C5
-    {f: 523.25, d: 0.2}, // C5
-    {f: 523.25, d: 0.4}, // C5
-    {f: 659.25, d: 0.4}, // E5
-    {f: 783.99, d: 0.6}, // G5
+    {f: 523.25, d: 0.2},
+    {f: 523.25, d: 0.2},
+    {f: 523.25, d: 0.4},
+    {f: 659.25, d: 0.4},
+    {f: 783.99, d: 0.6},
   ];
   let timeOffset = 0;
   notes.forEach(n => {
     setTimeout(() => playNote(n.f, 'square', n.d, 0.1), timeOffset * 1000);
     timeOffset += n.d;
+  });
+}
+
+function toggleAudioMaster() {
+  soundEnabled = !soundEnabled;
+  document.getElementById('audioToggle').classList.toggle('on', soundEnabled);
+  localStorage.setItem('jra-sound', soundEnabled ? 'on' : 'off');
+  if (soundEnabled) initAudio();
+}
+
+async function handleAudioUpload(event, type) {
+  initAudio();
+  const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
+  if (!file) return;
+  
+  const dropZoneId = type === 'hover' ? 'labelHover' : 'labelClick';
+  
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    
+    if (type === 'hover') {
+      customHoverBuffer = audioBuffer;
+    } else {
+      customClickBuffer = audioBuffer;
+    }
+    
+    document.getElementById(dropZoneId).textContent = file.name;
+    document.getElementById(dropZoneId).style.color = "var(--g1)";
+  } catch(err) {
+    document.getElementById(dropZoneId).textContent = "Error loading file";
+    document.getElementById(dropZoneId).style.color = "var(--accent)";
+  }
+}
+
+function setupDropZones() {
+  ['Hover', 'Click'].forEach(type => {
+    const dropZone = document.getElementById('drop' + type);
+    dropZone.addEventListener('dragover', e => { 
+      e.preventDefault(); 
+      dropZone.classList.add('dragover'); 
+    });
+    dropZone.addEventListener('dragleave', e => { 
+      dropZone.classList.remove('dragover'); 
+    });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      handleAudioUpload(e, type.toLowerCase());
+    });
   });
 }
 
@@ -1124,26 +1201,24 @@ async function sbFetchAll(table, select) {
   return all;
 }
 
-// Loading state
 function showLoading(msg) {
   const el = document.getElementById('loadingOverlay');
   const ml = document.getElementById('loadingMsg');
   if (el) el.style.display = 'flex';
   if (ml) ml.textContent = msg || 'Loading...';
 }
+
 function hideLoading() {
   const el = document.getElementById('loadingOverlay');
   if (el) el.style.display = 'none';
-  playFanfare(); // Play fanfare when loading finishes
-  setTimeout(attachSoundListeners, 100); // Re-attach sound listeners to new DOM elements
+  playFanfare(); 
+  setTimeout(attachSoundListeners, 100); 
 }
 
-// Main data loader
 async function loadDashboard() {
   showLoading('Connecting to database...');
 
   try {
-    // Stats
     showLoading('Loading overview stats...');
     const [totalRaces, totalHorses, totalJockeys] = await Promise.all([
       sbFetch('races?select=race_id&grade=eq.G1').then(d => {
@@ -1154,20 +1229,16 @@ async function loadDashboard() {
       sbFetch('races?select=jockey_name').then(d => new Set(d.map(r => r.jockey_name)).size),
     ]);
 
-    // Grade counts
     showLoading('Loading race data...');
     const allRaces = await sbFetchAll('races', 'race_id,grade,race_date,prize_10k_jpy,rank,horse_name,jockey_name,trainer_name,venue,distance_m,win_odds,surface,race_name');
 
-    // Dynamically update the header stats
     document.getElementById('statTotalRaces').textContent = allRaces.length.toLocaleString();
     document.getElementById('statTotalHorses').textContent = totalHorses.toLocaleString();
     document.getElementById('statTotalJockeys').textContent = totalJockeys.toLocaleString();
 
-    // Process data client-side
     const winners = allRaces.filter(r => r.rank === 1);
     const g1Winners = winners.filter(r => r.grade === 'G1');
 
-    // Grade breakdown
     const gradeCounts = {};
     const uniqueRaces = new Map();
     allRaces.forEach(r => {
@@ -1177,7 +1248,6 @@ async function loadDashboard() {
       }
     });
 
-    // BAR CHARTS: Strictly G1 Winners
     const jockeyWins = {};
     g1Winners.forEach(r => { jockeyWins[r.jockey_name] = (jockeyWins[r.jockey_name] || 0) + 1; });
     const topJockeys = Object.entries(jockeyWins).sort((a,b) => b[1]-a[1]).slice(0,15)
@@ -1193,7 +1263,6 @@ async function loadDashboard() {
     const topTrainers = Object.entries(trainerWins).sort((a,b) => b[1]-a[1]).slice(0,15)
       .map(([name,wins]) => ({name,wins}));
 
-    // Earnings
     const horseEarn = {};
     allRaces.forEach(r => { if(r.prize_10k_jpy) horseEarn[r.horse_name] = (horseEarn[r.horse_name]||0) + r.prize_10k_jpy; });
     const topHorseEarn = Object.entries(horseEarn).sort((a,b) => b[1]-a[1]).slice(0,20)
@@ -1204,17 +1273,14 @@ async function loadDashboard() {
     const topJockeyEarn = Object.entries(jockeyEarn).sort((a,b) => b[1]-a[1]).slice(0,20)
       .map(([name,p]) => ({name, prize_100m: +(p/100000).toFixed(3)}));
 
-    // Prize pool by year
     const yearPrize = {};
     winners.forEach(r => {
       const yr = r.race_date?.slice(0,4);
       if(yr) yearPrize[yr] = (yearPrize[yr]||0) + (r.prize_10k_jpy||0);
     });
 
-    // Group Top 5 G1 winners per year for the new tabs
     ALL_YEARS = [...new Set(allRaces.map(r => +r.race_date?.slice(0,4)))].filter(Boolean).sort();
     
-    // Update the dynamic total years stat
     document.getElementById('statTotalYears').textContent = ALL_YEARS.length;
 
     const g1ByYear = {};
@@ -1235,7 +1301,6 @@ async function loadDashboard() {
       };
     });
 
-    // G1 winners for table
     const g1Table = g1Winners.sort((a,b) => b.race_date?.localeCompare(a.race_date))
       .map(r => ({
         race_date: r.race_date,
@@ -1250,20 +1315,17 @@ async function loadDashboard() {
         race_id: r.race_id,
       }));
 
-    // Venue wins
     const venueWins = {};
     winners.forEach(r => { venueWins[r.venue] = (venueWins[r.venue]||0) + 1; });
     const venueData = Object.entries(venueWins).sort((a,b) => b[1]-a[1])
       .map(([venue,wins]) => ({venue,wins}));
 
-    // Update grade pills
     const gradePills = document.querySelectorAll('.grade-pill-num');
     gradePills[0].textContent = (gradeCounts['G1']||0).toLocaleString();
     gradePills[1].textContent = (gradeCounts['G2']||0).toLocaleString();
     gradePills[2].textContent = (gradeCounts['G3']||0).toLocaleString();
     gradePills[3].textContent = (gradeCounts['Listed']||0).toLocaleString();
 
-    // Render all components
     showLoading('Rendering dashboard...');
 
     if(topJockeys.length) renderBars('jockeyBars', topJockeys, topJockeys[0].wins);
@@ -1272,10 +1334,8 @@ async function loadDashboard() {
     if(topHorseEarn.length) renderEarnBars('horseEarnBars', topHorseEarn);
     if(topJockeyEarn.length) renderEarnBars('jockeyEarnBars', topJockeyEarn);
 
-    // Build the Year Grid Buttons
     renderYearGrids();
 
-    // Update venue bars
     const venueEl = document.getElementById('venueBars');
     venueEl.innerHTML = '';
     const venueColors = ['#e8335a','#d4af37','#00c9a7','#7c5cbf','#3a7bd5','#ff6b35','#2ecc71','#e74c3c','#f39c12','#95a5a6'];
@@ -1290,13 +1350,11 @@ async function loadDashboard() {
       </div>`;
     });
 
-    // Update prize chart data
     window.PRIZE_DATA = Object.entries(yearPrize)
       .sort((a,b) => a[0]-b[0])
       .map(([year,prize]) => ({year:+year, prize_100m: +(prize/10000).toFixed(1)}));
     drawPrizeChart('prizeChart', null, {top:8, right:8, bottom:8, left:8});
 
-    // Build G1 table
     window.DATA = { recent_g1: g1Table };
     buildTable();
 
@@ -1312,7 +1370,6 @@ async function loadDashboard() {
 
 const DATA = { recent_g1: [] };
 let activeFilter = 'all';
-
 
 window.PRIZE_DATA = [{"year":1986,"prize_100m":36.3},{"year":1987,"prize_100m":40.7},{"year":1988,"prize_100m":44.3},{"year":1989,"prize_100m":47.9},{"year":1990,"prize_100m":51.6},{"year":1991,"prize_100m":55.9},{"year":1992,"prize_100m":59.3},{"year":1993,"prize_100m":59.3},{"year":1994,"prize_100m":62.7},{"year":1995,"prize_100m":64.8},{"year":1996,"prize_100m":69.4},{"year":1997,"prize_100m":71.5},{"year":1998,"prize_100m":72.0},{"year":1999,"prize_100m":68.9},{"year":2000,"prize_100m":71.1},{"year":2001,"prize_100m":72.0},{"year":2002,"prize_100m":72.2},{"year":2003,"prize_100m":72.1},{"year":2004,"prize_100m":72.0},{"year":2005,"prize_100m":71.0},{"year":2006,"prize_100m":73.1},{"year":2007,"prize_100m":73.4},{"year":2008,"prize_100m":73.2},{"year":2009,"prize_100m":73.6},{"year":2010,"prize_100m":73.9},{"year":2011,"prize_100m":74.3},{"year":2012,"prize_100m":71.5},{"year":2013,"prize_100m":71.9},{"year":2014,"prize_100m":72.9},{"year":2015,"prize_100m":74.6},{"year":2016,"prize_100m":77.5},{"year":2017,"prize_100m":78.1},{"year":2018,"prize_100m":81.6},{"year":2019,"prize_100m":79.9},{"year":2020,"prize_100m":81.0},{"year":2021,"prize_100m":44.9}];
 
@@ -1342,7 +1399,6 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   const mutedColor = 'rgba(255,255,255,0.08)';
   const textColor = 'rgba(255,255,255,0.25)';
 
-  // Grid lines
   ctx.strokeStyle = mutedColor;
   ctx.lineWidth = 1;
   [20, 40, 60, 80].forEach(v => {
@@ -1360,7 +1416,6 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
     }
   });
 
-  // Fill area
   const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
   grad.addColorStop(0, accent + '44');
   grad.addColorStop(1, accent + '00');
@@ -1373,7 +1428,6 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Bars
   (window.PRIZE_DATA||[]).forEach((d, i) => {
     const x = xPos(i);
     const y = yPos(d.prize_100m);
@@ -1388,7 +1442,6 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
     ctx.setLineDash([]);
   });
 
-  // Line
   ctx.beginPath();
   ctx.strokeStyle = accent;
   ctx.lineWidth = 2;
@@ -1398,7 +1451,6 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
   });
   ctx.stroke();
 
-  // Dots
   (window.PRIZE_DATA||[]).forEach((d, i) => {
     const isLast = i === n - 1;
     ctx.beginPath();
@@ -1472,7 +1524,6 @@ window.addEventListener('resize', () => {
   drawPrizeChart('prizeChart', null, {top:8, right:8, bottom:8, left:8});
 });
 
-// Bar lists
 function renderBars(containerId, data, maxVal) {
   const el = document.getElementById(containerId);
   data.forEach((d, i) => {
@@ -1503,8 +1554,6 @@ function renderEarnBars(containerId, data) {
   });
 }
 
-
-// New Interactive Ranking Modal logic
 function renderYearGrids() {
   const hGrid = document.getElementById('horseYearGrid');
   const jGrid = document.getElementById('jockeyYearGrid');
@@ -1556,8 +1605,6 @@ function closeRankingModal() {
   document.getElementById('rankingModal').style.display = 'none';
 }
 
-
-// Tab switcher
 function switchTab(id, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1565,8 +1612,6 @@ function switchTab(id, btn) {
   btn.classList.add('active');
 }
 
-
-// Results table
 function oddsClass(o) {
   if (!o || o === 0) return 'odds-mid';
   if (o <= 3) return 'odds-low';
@@ -1645,9 +1690,11 @@ function setFilter(f, btn) {
   filterTable();
 }
 
-window.addEventListener("DOMContentLoaded", loadDashboard);
+window.addEventListener("DOMContentLoaded", () => {
+  setupDropZones();
+  loadDashboard();
+});
 </script>
-
 
 <div id="loadingOverlay" style="
   position:fixed;inset:0;background:rgba(10,10,15,0.92);
@@ -1679,11 +1726,34 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
   <div class="settings-title">⚙ Customize</div>
 
   <div class="settings-group">
-    <div class="settings-label">Theme</div>
+    <div class="settings-label">Interface</div>
     <div class="theme-toggle-row">
       <span style="font-size:0.8rem;color:var(--text)">☀️ Light mode</span>
       <div class="toggle-switch" id="themeToggle" onclick="toggleTheme()">
         <div class="toggle-knob"></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="settings-divider">
+
+  <div class="settings-group">
+    <div class="settings-label">Sound System</div>
+    <div class="theme-toggle-row" style="margin-bottom:0.8rem;">
+      <span style="font-size:0.8rem;color:var(--text)">🔊 Enable Audio</span>
+      <div class="toggle-switch on" id="audioToggle" onclick="toggleAudioMaster()">
+        <div class="toggle-knob"></div>
+      </div>
+    </div>
+    
+    <div style="display:flex;gap:0.4rem;flex-direction:column;">
+      <div class="drop-zone" id="dropHover" onclick="document.getElementById('fileHover').click()">
+        <span id="labelHover">Drop Hover Sound (.wav, .mp3)</span>
+        <input type="file" id="fileHover" accept="audio/*" style="display:none" onchange="handleAudioUpload(event, 'hover')">
+      </div>
+      <div class="drop-zone" id="dropClick" onclick="document.getElementById('fileClick').click()">
+        <span id="labelClick">Drop Click Sound (.wav, .mp3)</span>
+        <input type="file" id="fileClick" accept="audio/*" style="display:none" onchange="handleAudioUpload(event, 'click')">
       </div>
     </div>
   </div>
@@ -1713,30 +1783,29 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
     <div class="font-pills">
       <button class="font-pill active" onclick="setFont('dm','DM Sans')" id="font-dm">
         <span class="font-pill-name" style="font-family:'DM Sans'">DM Sans</span>
-        <span class="font-pill-sample" style="font-family:'DM Sans'">Clean · Modern · Default</span>
+        <span class="font-pill-sample" style="font-family:'DM Sans'">Clean, Modern, Default</span>
       </button>
       <button class="font-pill" onclick="setFont('grotesk','Space Grotesk')" id="font-grotesk">
         <span class="font-pill-name" style="font-family:'Space Grotesk'">Space Grotesk</span>
-        <span class="font-pill-sample" style="font-family:'Space Grotesk'">Geometric · Technical</span>
+        <span class="font-pill-sample" style="font-family:'Space Grotesk'">Geometric, Technical</span>
       </button>
       <button class="font-pill" onclick="setFont('playfair','Playfair Display')" id="font-playfair">
         <span class="font-pill-name" style="font-family:'Playfair Display'">Playfair Display</span>
-        <span class="font-pill-sample" style="font-family:'Playfair Display'">Elegant · Editorial</span>
+        <span class="font-pill-sample" style="font-family:'Playfair Display'">Elegant, Editorial</span>
       </button>
       <button class="font-pill" onclick="setFont('syne','Syne')" id="font-syne">
         <span class="font-pill-name" style="font-family:'Syne'">Syne</span>
-        <span class="font-pill-sample" style="font-family:'Syne'">Bold · Expressive</span>
+        <span class="font-pill-sample" style="font-family:'Syne'">Bold, Expressive</span>
       </button>
       <button class="font-pill" onclick="setFont('ibm','IBM Plex Sans')" id="font-ibm">
         <span class="font-pill-name" style="font-family:'IBM Plex Sans'">IBM Plex Sans</span>
-        <span class="font-pill-sample" style="font-family:'IBM Plex Sans'">Sharp · Technical</span>
+        <span class="font-pill-sample" style="font-family:'IBM Plex Sans'">Sharp, Technical</span>
       </button>
     </div>
   </div>
 </div>
 
 <script>
-// Settings panel
 function toggleSettings() {
   document.getElementById('settingsPanel').classList.toggle('open');
 }
@@ -1747,7 +1816,6 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// Theme toggle
 let isLight = false;
 function toggleTheme() {
   isLight = !isLight;
@@ -1756,12 +1824,10 @@ function toggleTheme() {
   localStorage.setItem('jra-theme', isLight ? 'light' : 'dark');
 }
 
-// Accent color
 function updateAccent(hex) {
   document.documentElement.style.setProperty('--accent', hex);
   document.getElementById('colorWheel').value = hex;
   document.getElementById('colorHex').value = hex;
-  // Update bar fills
   document.querySelectorAll('.bar-fill').forEach(el => {
     el.style.background = `linear-gradient(90deg, ${hex}, ${lighten(hex, 30)})`;
   });
@@ -1788,7 +1854,6 @@ function darken(hex, pct) {
   return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
 }
 
-// Font selector
 const FONTS = {
   'dm':       'DM Sans',
   'grotesk':  'Space Grotesk',
@@ -1803,12 +1868,19 @@ function setFont(key, family) {
   localStorage.setItem('jra-font', key);
 }
 
-// Restore saved preferences
 (function() {
   const savedAccent = localStorage.getItem('jra-accent');
   if (savedAccent) updateAccent(savedAccent);
+  
   const savedTheme = localStorage.getItem('jra-theme');
   if (savedTheme === 'light') toggleTheme();
+  
+  const savedSound = localStorage.getItem('jra-sound');
+  if (savedSound === 'off') {
+    soundEnabled = false;
+    document.getElementById('audioToggle').classList.remove('on');
+  }
+
   const savedFont = localStorage.getItem('jra-font');
   if (savedFont && FONTS[savedFont]) setFont(savedFont, FONTS[savedFont]);
 })();
