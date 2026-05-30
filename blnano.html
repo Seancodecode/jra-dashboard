@@ -7,7 +7,7 @@
   body{margin:0;background:#050508;overflow:hidden;font-family:system-ui,sans-serif;}
   #cv{width:100%;height:100vh;}
 
-  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:165px;}
+  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:175px;}
   .btn{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:monospace;
     background:rgba(15,15,22,0.92);border:1px solid rgba(255,255,255,0.12);border-radius:6px;
     padding:6px 12px;color:rgba(255,255,255,0.45);cursor:pointer;transition:all .2s;text-align:center;}
@@ -155,8 +155,22 @@
 
   <div class="ctrl-box">
     <div class="ctrl-row" style="border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:5px;margin-bottom:8px;">
-      <span class="ctrl-label">Animations</span>
+      <span class="ctrl-label">Visuals & Animations</span>
     </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Glow Brightness</span>
+      <span class="ctrl-val" id="glowVal">1.0x</span>
+    </div>
+    <input type="range" id="glowSlider" min="0" max="3" step="0.1" value="1"
+           oninput="updateGlow(this.value)" style="opacity:0.8;margin-bottom:10px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Spin Map</span>
+      <button class="btn" id="spinBtn" onclick="toggleSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="spinSpeed" min="-5" max="5" step="0.1" value="1"
+           oninput="spinSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:10px;">
     
     <div class="ctrl-row">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">Pulse Nodes</span>
@@ -215,6 +229,7 @@ let spreadFactor = 1;
 let maxDepth = 0;
 
 let globalTime    = 0;
+let glowFactor    = 1;
 let isWaveOn      = false;
 let waveSpeed     = 1;
 let isWobbleOn    = false;
@@ -223,6 +238,9 @@ let isSpectrumOn  = false;
 let spectrumSpeed = 2;
 let isFloatOn     = false;
 let floatSim      = null;
+let isSpinOn      = false;
+let spinSpeed     = 1;
+let mapAngle      = 0;
 
 let audioCtx = null;
 let analyser = null;
@@ -288,6 +306,12 @@ function stopAudio() {
   document.getElementById('stopAudioBtn').style.display = 'none';
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
   NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
+  
+  // Reset the audio light reactive changes
+  NG.selectAll('.main-node')
+    .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5)) * Math.min(1, glowFactor))
+    .attr('stroke-opacity', 0.9 * glowFactor)
+    .attr('stroke-width', d => d.id === 'root' ? 0 : 2);
 }
 
 function updateVolume(val) {
@@ -297,8 +321,25 @@ function updateVolume(val) {
   }
 }
 
+function updateGlow(val) {
+  glowFactor = parseFloat(val);
+  document.getElementById('glowVal').textContent = glowFactor.toFixed(1) + 'x';
+  d3.select('#gl feGaussianBlur').attr('stdDeviation', 6 * glowFactor);
+  
+  NG.selectAll('.main-node')
+    .attr('stroke-opacity', 0.9 * glowFactor)
+    .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5)) * Math.min(1, glowFactor));
+    
+  LG.selectAll('path').attr('stroke-opacity', d => (d.source.id === 'root' ? 0.8 : 0.6) * glowFactor);
+}
+
 d3.timer(elapsed => {
   globalTime = elapsed;
+  
+  if (isSpinOn) {
+    mapAngle += spinSpeed * 0.2;
+    d3.select('#mapLayer').attr('transform', `rotate(${mapAngle}, ${cx}, ${cy})`);
+  }
   
   let hasAudioData = false;
   if (isAudioPlaying && analyser) {
@@ -307,7 +348,7 @@ d3.timer(elapsed => {
   }
 
   if (isWaveOn || hasAudioData) {
-    NG.selectAll('g.node-inner').attr('transform', d => {
+    NG.selectAll('g.node-inner').attr('transform', function(d) {
       let scale = 1;
       let audioScale = 0;
       
@@ -318,6 +359,14 @@ d3.timer(elapsed => {
         
         let freqVal = dataArray[binIndex] || 0;
         audioScale = (freqVal / 255) * 1.8;
+        
+        // Node light up reaction
+        let lightPulse = audioScale / 1.8; 
+        let baseFill = d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5);
+        d3.select(this).select('.main-node')
+          .attr('fill-opacity', Math.min(1, baseFill + lightPulse) * Math.min(1, glowFactor))
+          .attr('stroke-opacity', Math.min(1, 0.9 + lightPulse * 1.5) * glowFactor)
+          .attr('stroke-width', (d.id === 'root' ? 0 : 2) + lightPulse * 8);
       }
 
       if (isWaveOn) {
@@ -361,6 +410,23 @@ function updateSpacing(val) {
   if (root) {
     traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
     update(root);
+  }
+}
+
+function toggleSpin() {
+  isSpinOn = !isSpinOn;
+  const btn = document.getElementById('spinBtn');
+  const slider = document.getElementById('spinSpeed');
+  if (isSpinOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '1';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
   }
 }
 
@@ -519,6 +585,8 @@ function focusNode(id) {
   }
 
   const zoomLevel = 2; 
+  // Adjust pan so the focused node hits center regardless of map spin
+  // Calculating the untransformed coordinates is necessary to center perfectly in the viewport.
   const t = d3.zoomIdentity
     .translate(cx, cy)
     .scale(zoomLevel)
@@ -577,7 +645,7 @@ function pulseNode(id) {
     .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
     .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
     .transition().duration(300).attr('r', d => nodeR(d))
-      .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.2));
+      .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.2)) * Math.min(1, glowFactor));
 }
 
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
@@ -613,7 +681,9 @@ const zoom = d3.zoom().scaleExtent([0.05, 8]).on('zoom', e => {
   g.attr('transform', zoomT);
 });
 svg.call(zoom);
+
 const g = svg.append('g');
+const mapLayer = g.append('g').attr('id', 'mapLayer');
 
 const defs = svg.append('defs');
 const gf   = defs.append('filter').attr('id', 'gl').attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
@@ -622,8 +692,8 @@ const fm   = gf.append('feMerge');
 fm.append('feMergeNode').attr('in', 'blur');
 fm.append('feMergeNode').attr('in', 'SourceGraphic');
 
-const LG = g.append('g');
-const NG = g.append('g');
+const LG = mapLayer.append('g');
+const NG = mapLayer.append('g');
 
 let tipTimeout;
 const tipEl = document.getElementById('tip');
@@ -800,10 +870,10 @@ function update(source) {
     .attr('class', 'main-node')
     .attr('r', d => nodeR(d))
     .attr('fill', d => (d.data.g1 > 0 || d.id === 'root') ? bcolor(d) : '#1a1a26')
-    .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5))
+    .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5)) * Math.min(1, glowFactor))
     .attr('stroke', d => bcolor(d))
     .attr('stroke-width', d => d.id === 'root' ? 0 : 2)
-    .attr('stroke-opacity', 0.9)
+    .attr('stroke-opacity', 0.9 * glowFactor)
     .attr('filter', 'url(#gl)');
 
   inner.append('text').text(d => d.data.name)
@@ -853,7 +923,7 @@ function update(source) {
     })
     .merge(lk)
     .transition().duration(400)
-    .attr('stroke-opacity', d => d.source.id === 'root' ? 0.8 : 0.6)
+    .attr('stroke-opacity', d => (d.source.id === 'root' ? 0.8 : 0.6) * glowFactor)
     .attr('d', d => linkPath(d.source, d.target));
 
   lk.exit().transition().duration(400)
