@@ -159,14 +159,14 @@
     </div>
 
     <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Audio Glow</span>
-      <button class="btn" id="audioGlowBtn" onclick="toggleAudioGlow()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Glow Mode</span>
+      <button class="btn" id="glowModeBtn" onclick="toggleGlowMode()" style="padding:2px 6px;font-size:8px;">MANUAL</button>
     </div>
     <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="glowLabel">Static Brightness</span>
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="glowLabel">Brightness</span>
       <span class="ctrl-val" id="glowVal">1.0x</span>
     </div>
-    <input type="range" id="glowSlider" min="1" max="4" step="0.1" value="1"
+    <input type="range" id="glowSlider" min="0" max="4.0" step="0.1" value="1.0"
            oninput="updateGlowSlider(this.value)" style="opacity:0.8;margin-bottom:10px;">
 
     <div class="ctrl-row">
@@ -233,8 +233,8 @@ let spreadFactor = 1;
 let maxDepth = 0;
 
 let globalTime    = 0;
-let glowSliderVal = 1.0;
-let isAudioGlow   = false;
+let glowMode      = 'manual'; // 'manual' or 'audio'
+let manualGlowVal = 1.0;
 let smoothedEnergy= 0;
 let isWaveOn      = false;
 let waveSpeed     = 1;
@@ -313,7 +313,17 @@ function stopAudio() {
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
   NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
   
-  if (isAudioGlow) applyStaticGlow(1.0);
+  // Clean up any flashing nodes
+  NG.selectAll('.main-node')
+    .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5))
+    .attr('stroke-opacity', 0.9)
+    .attr('stroke-width', d => d.id === 'root' ? 0 : 2);
+    
+  if (glowMode === 'audio') {
+    applyStaticGlow(0); 
+  } else {
+    applyStaticGlow(manualGlowVal);
+  }
 }
 
 function updateVolume(val) {
@@ -323,43 +333,45 @@ function updateVolume(val) {
   }
 }
 
-function toggleAudioGlow() {
-  isAudioGlow = !isAudioGlow;
-  const btn = document.getElementById('audioGlowBtn');
+function toggleGlowMode() {
+  const btn = document.getElementById('glowModeBtn');
+  const slider = document.getElementById('glowSlider');
   const label = document.getElementById('glowLabel');
-  
-  if (isAudioGlow) {
-    btn.textContent = 'ON';
+  const valDisp = document.getElementById('glowVal');
+
+  if (glowMode === 'manual') {
+    glowMode = 'audio';
+    btn.textContent = 'AUDIO';
     btn.style.color = '#00ffcc';
     btn.style.borderColor = '#00ffcc';
-    label.textContent = 'Threshold limit';
-    document.getElementById('glowVal').textContent = glowSliderVal.toFixed(1) + 'x Max';
+    slider.style.opacity = '0.3';
+    slider.style.pointerEvents = 'none';
+    label.textContent = 'Audio Driven';
+    valDisp.textContent = 'AUTO';
   } else {
-    btn.textContent = 'OFF';
+    glowMode = 'manual';
+    btn.textContent = 'MANUAL';
     btn.style.color = '';
     btn.style.borderColor = '';
-    label.textContent = 'Static Brightness';
-    document.getElementById('glowVal').textContent = glowSliderVal.toFixed(1) + 'x';
-    applyStaticGlow(glowSliderVal);
+    slider.style.opacity = '0.8';
+    slider.style.pointerEvents = 'auto';
+    label.textContent = 'Brightness';
+    valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
+    applyStaticGlow(manualGlowVal);
   }
 }
 
 function updateGlowSlider(val) {
-  glowSliderVal = parseFloat(val);
-  if (isAudioGlow) {
-    document.getElementById('glowVal').textContent = glowSliderVal.toFixed(1) + 'x Max';
-  } else {
-    document.getElementById('glowVal').textContent = glowSliderVal.toFixed(1) + 'x';
-    applyStaticGlow(glowSliderVal);
+  manualGlowVal = parseFloat(val);
+  if (glowMode === 'manual') {
+    document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x';
+    applyStaticGlow(manualGlowVal);
   }
 }
 
+// Only manipulates the SVG blur effect size, keeping base vector graphics fully visible
 function applyStaticGlow(factor) {
   d3.select('#gl feGaussianBlur').attr('stdDeviation', 6 * factor);
-  NG.selectAll('.main-node')
-    .attr('stroke-opacity', 0.9 * factor)
-    .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5)) * Math.min(1, factor));
-  LG.selectAll('path').attr('stroke-opacity', d => (d.source.id === 'root' ? 0.8 : 0.6) * factor);
 }
 
 d3.timer(elapsed => {
@@ -375,18 +387,19 @@ d3.timer(elapsed => {
     analyser.getByteFrequencyData(dataArray);
     hasAudioData = true;
     
-    let sum = 0;
-    let limit = Math.floor(dataArray.length * 0.5);
-    for(let i = 0; i < limit; i++) sum += dataArray[i];
-    let currentEnergy = (sum / limit) / 255;
-    smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.3;
+    // Grab the heavy hits from the low end for the master glow
+    if (glowMode === 'audio') {
+      let sum = 0;
+      let limit = Math.floor(dataArray.length * 0.4);
+      for(let i = 0; i < limit; i++) sum += dataArray[i];
+      let currentEnergy = Math.min(1, ((sum / limit) / 255) * 1.5);
+      smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.25;
+      
+      // Auto-scale up to max brightness of 4.0
+      applyStaticGlow(smoothedEnergy * 4.0);
+    }
   } else {
-    smoothedEnergy = 0;
-  }
-
-  if (isAudioGlow && isAudioPlaying) {
-    let activeGlow = 1.0 + (smoothedEnergy * (glowSliderVal - 1.0));
-    d3.select('#gl feGaussianBlur').attr('stdDeviation', 6 * activeGlow);
+    if (glowMode === 'audio') smoothedEnergy = 0;
   }
 
   if (isWaveOn || hasAudioData) {
@@ -398,16 +411,25 @@ d3.timer(elapsed => {
         let safeDepth = Math.max(1, maxDepth);
         let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
         binIndex = Math.min(binIndex, dataArray.length - 1);
-        
         let freqVal = dataArray[binIndex] || 0;
         audioScale = (freqVal / 255) * 1.8;
         
-        let lightPulse = audioScale / 1.8; 
         let baseFill = d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5);
-        d3.select(this).select('.main-node')
-          .attr('fill-opacity', Math.min(1, baseFill + lightPulse) * Math.min(1, glowSliderVal))
-          .attr('stroke-opacity', Math.min(1, 0.9 + lightPulse * 1.5) * glowSliderVal)
-          .attr('stroke-width', (d.id === 'root' ? 0 : 2) + lightPulse * 8);
+        
+        if (glowMode === 'audio') {
+          // If Audio mode is on, let individual nodes flare up
+          let lightPulse = audioScale / 1.8; 
+          d3.select(this).select('.main-node')
+            .attr('fill-opacity', Math.min(1, baseFill + lightPulse))
+            .attr('stroke-opacity', Math.min(1, 0.9 + lightPulse * 1.5))
+            .attr('stroke-width', (d.id === 'root' ? 0 : 2) + lightPulse * 6);
+        } else {
+          // Keep them perfectly stable if we are in pure manual mode
+          d3.select(this).select('.main-node')
+            .attr('fill-opacity', baseFill)
+            .attr('stroke-opacity', 0.9)
+            .attr('stroke-width', d.id === 'root' ? 0 : 2);
+        }
       }
 
       if (isWaveOn) {
@@ -683,8 +705,7 @@ function pulseNode(id) {
     .transition().duration(180).attr('r', d => nodeR(d) * 1.6)
     .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
     .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
-    .transition().duration(300).attr('r', d => nodeR(d))
-      .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.2)) * Math.min(1, glowSliderVal));
+    .transition().duration(300).attr('r', d => nodeR(d));
 }
 
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
@@ -909,10 +930,10 @@ function update(source) {
     .attr('class', 'main-node')
     .attr('r', d => nodeR(d))
     .attr('fill', d => (d.data.g1 > 0 || d.id === 'root') ? bcolor(d) : '#1a1a26')
-    .attr('fill-opacity', d => (d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5)) * (isAudioGlow ? 1.0 : Math.min(1, glowSliderVal)))
+    .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5))
     .attr('stroke', d => bcolor(d))
     .attr('stroke-width', d => d.id === 'root' ? 0 : 2)
-    .attr('stroke-opacity', (isAudioGlow ? 0.9 : 0.9 * glowSliderVal))
+    .attr('stroke-opacity', 0.9)
     .attr('filter', 'url(#gl)');
 
   inner.append('text').text(d => d.data.name)
@@ -962,7 +983,7 @@ function update(source) {
     })
     .merge(lk)
     .transition().duration(400)
-    .attr('stroke-opacity', d => (d.source.id === 'root' ? 0.8 : 0.6) * (isAudioGlow ? 1.0 : glowSliderVal))
+    .attr('stroke-opacity', d => d.source.id === 'root' ? 0.8 : 0.6)
     .attr('d', d => linkPath(d.source, d.target));
 
   lk.exit().transition().duration(400)
