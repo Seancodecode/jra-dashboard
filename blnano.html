@@ -37,6 +37,11 @@
   <button class="btn" onclick="openLevel(1)">Lvl 1</button>
   <button class="btn" onclick="openLevel(2)">Lvl 2</button>
   <button class="btn" onclick="openLevel(3)">Lvl 3</button>
+  
+  <div style="display: flex; flex-direction: column; gap: 5px; background: rgba(15,15,22,0.92); border: 1px solid rgba(255,255,255,0.12); padding: 8px 10px; border-radius: 6px; margin-top: 5px;">
+    <label style="font-size: 9px; color: rgba(255,255,255,0.45); font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Spread</label>
+    <input type="range" min="0.5" max="3" step="0.1" value="1" oninput="updateSpacing(this.value)" style="width: 100%; cursor: pointer;">
+  </div>
 </div>
 <div id="tip"></div>
 <div class="hint">Click to expand/collapse · Drag node to reposition · Scroll to zoom</div>
@@ -44,6 +49,16 @@
 const W = window.innerWidth, H = window.innerHeight;
 const cx = W/2, cy = H/2;
 let root = null;
+let spreadFactor = 1; // New global multiplier
+
+function updateSpacing(val) {
+  spreadFactor = parseFloat(val);
+  if (root) {
+    // Clear fixed, dragged positions so the tree scales cleanly
+    traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
+    update(root);
+  }
+}
 
 // Replace these with your actual Supabase credentials
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
@@ -151,7 +166,8 @@ function update(source) {
   const links = root.links();
 
   nodes.forEach(d => {
-    d.y = RADII[Math.min(d.depth, RADII.length - 1)];
+    // Multiply the radius by our new spreadFactor slider
+    d.y = RADII[Math.min(d.depth, RADII.length - 1)] * spreadFactor;
     if (d.data.ox != null) {
       d.cartX = d.data.ox;
       d.cartY = d.data.oy;
@@ -221,15 +237,15 @@ function update(source) {
     .attr("filter", d => (d.id === "root" || d.data.g1 >= 5) ? "url(#gl)" : null);
 
   enter.append("text").text(d => d.data.name)
-    .attr("dy", d => nodeR(d) + 13).attr("text-anchor", "middle")
-    .attr("font-size", d => d.id === "root" ? "13px" : (d.data.g1 >= 5 ? "10px" : "9px"))
-    .attr("font-weight", d => (d.id === "root" || d.data.g1 >= 5) ? "600" : "400")
-    .attr("fill", d => d.id === "root" ? "#fff" : (d.data.g1 > 0 ? bcolor(d) : "rgba(255,255,255,0.4)"))
+    .attr("dy", d => nodeR(d) + 14).attr("text-anchor", "middle")
+    .attr("font-size", d => d.id === "root" ? "14px" : (d.data.g1 >= 5 ? "12px" : "10px"))
+    .attr("font-weight", d => (d.id === "root" || d.data.g1 >= 5) ? "800" : "600")
+    .attr("fill", d => d.id === "root" ? "#fff" : (d.data.g1 > 0 ? bcolor(d) : "rgba(255,255,255,0.75)"))
     .attr("pointer-events", "none");
 
   enter.filter(d => d.data.g1 >= 2).append("text").text(d => d.data.g1 + "G1")
-    .attr("dy", d => -nodeR(d) - 5).attr("text-anchor", "middle")
-    .attr("font-size", "8px").attr("font-family", "monospace").attr("font-weight", "700")
+    .attr("dy", d => -nodeR(d) - 6).attr("text-anchor", "middle")
+    .attr("font-size", "10px").attr("font-family", "monospace").attr("font-weight", "800")
     .attr("fill", d => bcolor(d)).attr("pointer-events", "none");
 
   enter.filter(d => d._children).append("text")
