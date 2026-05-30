@@ -14,6 +14,8 @@
   .btn:hover{border-color:#00c9a7;color:#00c9a7;text-shadow:0 0 8px rgba(0,201,167,0.5);}
   .fetch-btn{border-color:#d4af37;color:#d4af37;}
   .fetch-btn:hover{background:rgba(212,175,55,0.1);border-color:#ffd700;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.5);}
+  .audio-btn{border-color:#cc00ff;color:#cc00ff;display:none;}
+  .audio-btn:hover{background:rgba(204,0,255,0.1);text-shadow:0 0 10px rgba(204,0,255,0.5);}
 
   .ctrl-box{background:rgba(10,10,15,0.85);border:1px solid rgba(255,255,255,0.1);
     padding:8px 10px;border-radius:6px;backdrop-filter:blur(8px);}
@@ -34,7 +36,14 @@
     pointer-events:none;white-space:nowrap;}
   #welcome{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
     color:rgba(255,255,255,0.4);font-family:monospace;text-align:center;pointer-events:none;
-    text-shadow:0 0 10px rgba(255,255,255,0.1);}
+    text-shadow:0 0 10px rgba(255,255,255,0.1);z-index:10;}
+
+  #dropZone{position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,201,167,0.1);border:4px dashed rgba(0,201,167,0.5);
+    z-index:9999;display:none;justify-content:center;align-items:center;
+    pointer-events:none;backdrop-filter:blur(4px);}
+  #dropText{font-size:32px;font-family:monospace;color:#00c9a7;font-weight:800;
+    text-transform:uppercase;letter-spacing:4px;text-shadow:0 0 20px rgba(0,201,167,0.8);}
 
   #rankToggle{
     position:fixed;right:0;top:50%;transform:translateY(-50%);
@@ -110,11 +119,21 @@
 </head>
 <body>
 <div id="cv"></div>
-<div id="welcome">Ready to fetch data.<br><br>Custom parser ready for your database schema.</div>
+<div id="welcome">Ready to fetch data.<br>Drag & Drop an MP3/WAV to play audio.</div>
+
+<div id="dropZone"><div id="dropText">DROP BEATS HERE</div></div>
 
 <div class="ctrls">
   <button class="btn fetch-btn" onclick="fetchData()">Load from Supabase</button>
   <button class="btn" onclick="resetTree()">Reset View</button>
+  <button class="btn audio-btn" id="stopAudioBtn" onclick="stopAudio()">Stop Audio</button>
+  
+  <div class="ctrl-row audio-control" style="display:none;" id="volumeContainer">
+    <span class="ctrl-label" style="text-transform:none;font-size:10px;">Volume</span>
+    <span class="ctrl-val" id="volVal">100%</span>
+  </div>
+  <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1"
+         oninput="updateVolume(this.value)" style="opacity:0.8;margin-bottom:8px;display:none;accent-color:#cc00ff;" class="audio-control">
 
   <div class="ctrl-box">
     <div class="ctrl-row">
@@ -205,13 +224,109 @@ let spectrumSpeed = 2;
 let isFloatOn     = false;
 let floatSim      = null;
 
+let audioCtx = null;
+let analyser = null;
+let gainNode = null;
+let dataArray = null;
+let sourceNode = null;
+let isAudioPlaying = false;
+
+const dropZone = document.getElementById('dropZone');
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.style.display = 'flex';
+});
+document.addEventListener('dragleave', e => {
+  e.preventDefault();
+  if(e.relatedTarget === null) dropZone.style.display = 'none';
+});
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  dropZone.style.display = 'none';
+  const file = e.dataTransfer.files[0];
+  if (file && (file.type.includes('audio') || file.name.match(/\.(mp3|wav)$/i))) {
+    handleAudio(file);
+  }
+});
+
+async function handleAudio(file) {
+  if (sourceNode) { sourceNode.stop(); sourceNode.disconnect(); }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  
+  document.getElementById('welcome').style.display = 'block';
+  document.getElementById('welcome').innerHTML = 'Decoding Audio...';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  
+  sourceNode = audioCtx.createBufferSource();
+  sourceNode.buffer = audioBuffer;
+  
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256; 
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+  
+  gainNode = audioCtx.createGain();
+  const volSlider = document.getElementById('volSlider');
+  gainNode.gain.value = parseFloat(volSlider.value);
+  
+  sourceNode.connect(analyser);
+  analyser.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  sourceNode.start(0);
+  
+  isAudioPlaying = true;
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('stopAudioBtn').style.display = 'block';
+  document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'flex');
+  document.getElementById('volSlider').style.display = 'block';
+}
+
+function stopAudio() {
+  if (sourceNode) { sourceNode.stop(); sourceNode.disconnect(); }
+  isAudioPlaying = false;
+  document.getElementById('stopAudioBtn').style.display = 'none';
+  document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
+  NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
+}
+
+function updateVolume(val) {
+  document.getElementById('volVal').textContent = Math.round(val * 100) + '%';
+  if (gainNode) {
+    gainNode.gain.value = parseFloat(val);
+  }
+}
+
 d3.timer(elapsed => {
   globalTime = elapsed;
   
-  if (isWaveOn) {
+  let hasAudioData = false;
+  if (isAudioPlaying && analyser) {
+    analyser.getByteFrequencyData(dataArray);
+    hasAudioData = true;
+  }
+
+  if (isWaveOn || hasAudioData) {
     NG.selectAll('g.node-inner').attr('transform', d => {
-      const phase = d.depth * 1.5;
-      const scale = 1 + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
+      let scale = 1;
+      let audioScale = 0;
+      
+      if (hasAudioData) {
+        let safeDepth = Math.max(1, maxDepth);
+        let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
+        binIndex = Math.min(binIndex, dataArray.length - 1);
+        
+        let freqVal = dataArray[binIndex] || 0;
+        audioScale = (freqVal / 255) * 1.8;
+      }
+
+      if (isWaveOn) {
+        const phase = d.depth * 1.5;
+        scale = 1 + audioScale + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
+      } else {
+        scale = 1 + audioScale;
+      }
+      
       return `scale(${scale})`;
     });
   }
@@ -263,7 +378,9 @@ function toggleWave() {
     btn.style.color = '';
     btn.style.borderColor = '';
     slider.style.opacity = '0.5';
-    NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
+    if (!isAudioPlaying) {
+        NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
+    }
   }
 }
 
@@ -498,7 +615,6 @@ const zoom = d3.zoom().scaleExtent([0.05, 8]).on('zoom', e => {
 svg.call(zoom);
 const g = svg.append('g');
 
-// Optimized single-pass filter to fix lag
 const defs = svg.append('defs');
 const gf   = defs.append('filter').attr('id', 'gl').attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
 gf.append('feGaussianBlur').attr('stdDeviation', '6').attr('result', 'blur');
@@ -557,7 +673,17 @@ function linkPath(s, t) {
     const phase = globalTime * 0.005 * spectrumSpeed;
     const angle = Math.atan2(dy, dx);
     const freq = 3;
-    const amp = 12;
+    let audioAmp = 0;
+    
+    if (isAudioPlaying && dataArray) {
+        let safeDepth = Math.max(1, maxDepth);
+        let binIndex = Math.floor((s.depth / safeDepth) * (dataArray.length * 0.6));
+        binIndex = Math.min(binIndex, dataArray.length - 1);
+        let freqVal = dataArray[binIndex] || 0;
+        audioAmp = (freqVal / 255) * 20; 
+    }
+
+    const amp = 12 + audioAmp;
 
     for (let i = 1; i <= segments; i++) {
       const pct = i / segments;
@@ -768,7 +894,7 @@ function resetTree(){
 async function fetchData() {
   const welcome = document.getElementById('welcome');
   welcome.style.display = 'block';
-  welcome.innerHTML = 'Fetching data from Supabase...<br><br>Hang tight.';
+  welcome.innerHTML = 'Fetching data from Supabase...<br>Hang tight.';
 
   const { data: raw, error } = await db.from('pedigrees').select('*');
 
@@ -857,6 +983,10 @@ async function fetchData() {
 
     svg.transition().duration(750)
        .call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.3).translate(-W/2, -H/2));
+
+    document.getElementById('welcome').style.display = 'block';
+    document.getElementById('welcome').innerHTML = 'Data Loaded.<br>Drag & Drop an MP3/WAV anywhere to play.';
+    setTimeout(() => { document.getElementById('welcome').style.display = 'none'; }, 4000);
 
   } catch (err) {
     alert('Error parsing database data. Check the console for details.');
