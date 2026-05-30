@@ -418,6 +418,24 @@
     border-color: var(--accent);
     color: var(--accent);
   }
+  
+  .reset-btn {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.4rem;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    cursor: pointer;
+    margin-top: 0.2rem;
+    transition: all 0.2s;
+  }
+  .reset-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 
   .color-wheel-wrap {
     display: flex;
@@ -652,14 +670,6 @@
   <div>
     <div class="header-title">JRA GRADED RACES</div>
     <div class="header-sub">Japan Racing Association, 1986 to 2025, Historical Database</div>
-    <div style="margin-top:0.4rem">
-      <a href="https://www.kaggle.com/datasets/takamotoki/jra-horse-racing-dataset" target="_blank"
-         style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);text-decoration:none;
-                border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:1px;transition:color 0.2s;"
-         onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-        📦 Dataset by takamotoki on Kaggle
-      </a>
-    </div>
   </div>
   <div class="header-stats">
     <div>
@@ -993,7 +1003,7 @@
       <button class="filter-btn" onclick="setFilter('inter',this)">Intermediate 1801 to 2100</button>
       <button class="filter-btn" onclick="setFilter('long',this)">Long 2101+</button>
     </div>
-    <div class="scroll-table">
+    <div class="scroll-table" id="resultsScrollArea">
       <table class="results-table">
         <thead>
           <tr>
@@ -1033,8 +1043,9 @@
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
 let soundEnabled = true;
-let customHoverBuffer = null;
+let customScrollBuffer = null;
 let customClickBuffer = null;
+let lastScrollTime = 0;
 
 function initAudio() {
   if (!audioCtx) {
@@ -1070,13 +1081,17 @@ function playCustomBuffer(buffer, vol=0.2) {
   source.start();
 }
 
-function playHoverSound() {
+function playScrollSound() {
   if (!soundEnabled) return;
+  const now = Date.now();
+  if (now - lastScrollTime < 80) return; 
+  lastScrollTime = now;
+  
   initAudio();
-  if (customHoverBuffer) {
-    playCustomBuffer(customHoverBuffer, 0.2);
+  if (customScrollBuffer) {
+    playCustomBuffer(customScrollBuffer, 0.2);
   } else {
-    playNote(400, 'sine', 0.1, 0.05);
+    playNote(120, 'sine', 0.03, 0.03); 
   }
 }
 
@@ -1086,7 +1101,7 @@ function playClickSound() {
   if (customClickBuffer) {
     playCustomBuffer(customClickBuffer, 0.3);
   } else {
-    playNote(600, 'triangle', 0.15, 0.08);
+    playNote(180, 'triangle', 0.04, 0.05);
   }
 }
 
@@ -1119,14 +1134,14 @@ async function handleAudioUpload(event, type) {
   const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
   if (!file) return;
   
-  const dropZoneId = type === 'hover' ? 'labelHover' : 'labelClick';
+  const dropZoneId = type === 'scroll' ? 'labelScroll' : 'labelClick';
   
   try {
     const arrayBuffer = await file.arrayBuffer();
     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
     
-    if (type === 'hover') {
-      customHoverBuffer = audioBuffer;
+    if (type === 'scroll') {
+      customScrollBuffer = audioBuffer;
     } else {
       customClickBuffer = audioBuffer;
     }
@@ -1139,8 +1154,23 @@ async function handleAudioUpload(event, type) {
   }
 }
 
+function resetCustomAudio() {
+  customScrollBuffer = null;
+  customClickBuffer = null;
+  const lblScroll = document.getElementById('labelScroll');
+  const lblClick = document.getElementById('labelClick');
+  
+  lblScroll.textContent = 'Drop Scroll Sound (.wav, .mp3)';
+  lblScroll.style.color = 'var(--muted)';
+  
+  lblClick.textContent = 'Drop Click Sound (.wav, .mp3)';
+  lblClick.style.color = 'var(--muted)';
+  
+  playClickSound();
+}
+
 function setupDropZones() {
-  ['Hover', 'Click'].forEach(type => {
+  ['Scroll', 'Click'].forEach(type => {
     const dropZone = document.getElementById('drop' + type);
     dropZone.addEventListener('dragover', e => { 
       e.preventDefault(); 
@@ -1159,14 +1189,19 @@ function setupDropZones() {
 
 function attachSoundListeners() {
   document.querySelectorAll('button, .year-btn, .tab-btn, .filter-btn, .horse-link').forEach(el => {
-    el.addEventListener('mouseenter', playHoverSound);
     el.addEventListener('click', playClickSound);
   });
+  
+  window.addEventListener('scroll', playScrollSound, {passive: true});
+  
+  const resultsArea = document.getElementById('resultsScrollArea');
+  if (resultsArea) {
+    resultsArea.addEventListener('scroll', playScrollSound, {passive: true});
+  }
 }
 
 document.addEventListener('click', initAudio, { once: true });
 document.addEventListener('keydown', initAudio, { once: true });
-
 
 let ALL_YEARS = [];
 let TOP5_BY_YEAR = {};
@@ -1747,14 +1782,15 @@ window.addEventListener("DOMContentLoaded", () => {
     </div>
     
     <div style="display:flex;gap:0.4rem;flex-direction:column;">
-      <div class="drop-zone" id="dropHover" onclick="document.getElementById('fileHover').click()">
-        <span id="labelHover">Drop Hover Sound (.wav, .mp3)</span>
-        <input type="file" id="fileHover" accept="audio/*" style="display:none" onchange="handleAudioUpload(event, 'hover')">
+      <div class="drop-zone" id="dropScroll" onclick="document.getElementById('fileScroll').click()">
+        <span id="labelScroll">Drop Scroll Sound (.wav, .mp3)</span>
+        <input type="file" id="fileScroll" accept="audio/*" style="display:none" onchange="handleAudioUpload(event, 'scroll')">
       </div>
       <div class="drop-zone" id="dropClick" onclick="document.getElementById('fileClick').click()">
         <span id="labelClick">Drop Click Sound (.wav, .mp3)</span>
         <input type="file" id="fileClick" accept="audio/*" style="display:none" onchange="handleAudioUpload(event, 'click')">
       </div>
+      <button class="reset-btn" onclick="resetCustomAudio()">Reset Audio Defaults</button>
     </div>
   </div>
 
