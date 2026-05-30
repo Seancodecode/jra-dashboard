@@ -311,12 +311,9 @@ function stopAudio() {
   isAudioPlaying = false;
   document.getElementById('stopAudioBtn').style.display = 'none';
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
+  NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
   
-  if (glowMode === 'audio') {
-    applyStaticGlow(0); 
-  } else {
-    applyStaticGlow(manualGlowVal);
-  }
+  applyStaticGlow(glowMode === 'audio' ? 0 : manualGlowVal);
 }
 
 function updateVolume(val) {
@@ -337,17 +334,13 @@ function toggleGlowMode() {
     btn.textContent = 'AUDIO';
     btn.style.color = '#00ffcc';
     btn.style.borderColor = '#00ffcc';
-    slider.style.opacity = '0.3';
-    slider.style.pointerEvents = 'none';
-    label.textContent = 'Auto Sync';
-    valDisp.textContent = 'ACTIVE';
+    label.textContent = 'Max Threshold';
+    valDisp.textContent = manualGlowVal.toFixed(1) + 'x Cap';
   } else {
     glowMode = 'manual';
     btn.textContent = 'MANUAL';
     btn.style.color = '';
     btn.style.borderColor = '';
-    slider.style.opacity = '0.8';
-    slider.style.pointerEvents = 'auto';
     label.textContent = 'Intensity';
     valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
     applyStaticGlow(manualGlowVal);
@@ -359,25 +352,25 @@ function updateGlowSlider(val) {
   if (glowMode === 'manual') {
     document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x';
     applyStaticGlow(manualGlowVal);
+  } else {
+    document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x Cap';
   }
 }
 
-// Drives the static state of the network. Factor goes 0.0 to 4.0
 function applyStaticGlow(factor) {
   if (glowMode === 'audio') return; 
 
   NG.selectAll('.aura')
-    .attr('stroke-width', factor * 10)
-    .attr('opacity', factor * 0.25);
+    .attr('opacity', factor * 0.25)
+    .attr('transform', `scale(${1 + (factor * 0.3)})`);
 
   NG.selectAll('.main-node')
     .attr('fill-opacity', d => {
-       let base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.1);
-       return Math.min(1, base + (factor * 0.15));
+       let base = d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.8 : 0.15);
+       return Math.min(1, base + (factor * 0.05));
     });
 
-  LG.selectAll('path')
-    .attr('stroke-opacity', 0.1 + (factor * 0.15));
+  LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
 }
 
 d3.timer(elapsed => {
@@ -397,16 +390,15 @@ d3.timer(elapsed => {
       let sum = 0;
       let limit = Math.floor(dataArray.length * 0.4);
       for(let i = 0; i < limit; i++) sum += dataArray[i];
-      let currentEnergy = Math.min(1, ((sum / limit) / 255) * 1.5);
-      smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.25;
+      let currentEnergy = Math.min(1, ((sum / limit) / 255));
+      smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.3;
       
-      LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.7));
+      LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
     }
   } else {
     if (glowMode === 'audio') smoothedEnergy = 0;
   }
 
-  // Fast iteration per node for transform and specific frequency reaction
   NG.selectAll('g.node-inner').each(function(d) {
     let el = d3.select(this);
     let scale = 1;
@@ -416,30 +408,30 @@ d3.timer(elapsed => {
       let safeDepth = Math.max(1, maxDepth);
       let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
       binIndex = Math.min(binIndex, dataArray.length - 1);
-      let freqVal = dataArray[binIndex] || 0;
       
-      let normFreq = freqVal / 255;
-      audioScale = normFreq * 1.2;
-
-      // Independent Equalizer effect per node
+      let normFreq = (dataArray[binIndex] || 0) / 255;
+      
       if (glowMode === 'audio') {
         let energy = Math.pow(normFreq, 2); 
+        let cappedEnergy = energy * manualGlowVal; // Slider controls max limit
         
         el.select('.aura')
-          .attr('stroke-width', energy * 45)
-          .attr('opacity', energy * 0.85);
+          .attr('opacity', Math.min(1, cappedEnergy * 0.8))
+          .attr('transform', `scale(${1 + (cappedEnergy * 1.5)})`); // Literally expands the light
 
-        let base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.1);
+        let base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.15);
         el.select('.main-node')
-          .attr('fill-opacity', Math.min(1, base + energy));
+          .attr('fill-opacity', Math.min(1, base + cappedEnergy * 0.4));
       }
+      
+      audioScale = normFreq * 0.8;
     }
 
     if (isWaveOn) {
       const phase = d.depth * 1.5;
-      scale = 1 + audioScale + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
+      scale = 1 + (audioScale * 0.3) + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
     } else {
-      scale = 1 + audioScale;
+      scale = 1 + (audioScale * 0.3);
     }
     
     el.attr('transform', `scale(${scale})`);
@@ -703,7 +695,7 @@ function buildRankPanel(nodesMap) {
 function pulseNode(id) {
   const sel = NG.selectAll('g.nd').filter(d => d.id === String(id)).select('.main-node');
   sel
-    .transition().duration(180).attr('r', d => nodeR(d) * 2.8).attr('fill-opacity', 1)
+    .transition().duration(180).attr('r', d => nodeR(d) * 2.8)
     .transition().duration(180).attr('r', d => nodeR(d) * 1.6)
     .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
     .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
@@ -747,13 +739,20 @@ svg.call(zoom);
 const g = svg.append('g');
 const mapLayer = g.append('g').attr('id', 'mapLayer');
 
-// Expanded bounds fix the box-clipping issue completely
 const defs = svg.append('defs');
-const gf   = defs.append('filter').attr('id', 'gl').attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%');
-gf.append('feGaussianBlur').attr('stdDeviation', '8').attr('result', 'blur');
-const fm   = gf.append('feMerge');
-fm.append('feMergeNode').attr('in', 'blur');
-fm.append('feMergeNode').attr('in', 'SourceGraphic');
+
+// Generate a flawless radial gradient for every single color in the palette
+const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
+allColors.forEach(c => {
+  const grad = defs.append('radialGradient')
+    .attr('id', 'glow-' + c.replace('#', ''))
+    .attr('cx', '50%').attr('cy', '50%').attr('r', '50%');
+    
+  grad.append('stop').attr('offset', '0%').attr('stop-color', '#fff').attr('stop-opacity', 1);
+  grad.append('stop').attr('offset', '15%').attr('stop-color', c).attr('stop-opacity', 0.8);
+  grad.append('stop').attr('offset', '50%').attr('stop-color', c).attr('stop-opacity', 0.3);
+  grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
+});
 
 const LG = mapLayer.append('g');
 const NG = mapLayer.append('g');
@@ -925,17 +924,14 @@ function update(source) {
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  // The decoupled Aura layer handles the glow
+  // The new decoupled, pure math Aura layer
   inner.append('circle')
     .attr('class', 'aura')
-    .attr('r', d => nodeR(d))
-    .attr('fill', 'none')
-    .attr('stroke', d => bcolor(d))
-    .attr('stroke-width', 0)
+    .attr('r', d => nodeR(d) * 4.5) 
+    .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
     .attr('opacity', 0)
-    .attr('filter', 'url(#gl)');
+    .style('pointer-events', 'none');
 
-  // The core crisp shape
   inner.append('circle')
     .attr('class', 'main-node')
     .attr('r', d => nodeR(d))
@@ -1000,7 +996,6 @@ function update(source) {
 
   nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
 
-  // Init newly added nodes to match current system settings
   if (glowMode === 'manual') applyStaticGlow(manualGlowVal);
 
   if (isFloatOn && floatSim) {
