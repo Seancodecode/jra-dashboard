@@ -1791,6 +1791,36 @@ window.addEventListener("DOMContentLoaded", loadDashboard);
       </button>
     </div>
   </div>
+
+  <hr class="settings-divider">
+
+  <div class="settings-group" style="margin-bottom:0">
+    <div class="settings-label">Sound Effects</div>
+    <div class="sound-row">
+      <span class="sound-label">Enable sounds</span>
+      <div class="toggle-switch" id="soundToggle" onclick="toggleSound()">
+        <div class="toggle-knob"></div>
+      </div>
+    </div>
+    <div id="soundOptions" style="opacity:0.4;pointer-events:none;transition:opacity 0.2s">
+      <div style="margin-bottom:0.5rem">
+        <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.3rem">Volume</div>
+        <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="0.3"
+          oninput="updateVolume(this.value)">
+      </div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.3rem">Click sound</div>
+      <div class="sound-drop-zone" id="clickDropZone">
+        <input type="file" accept=".mp3,.wav,.ogg" onchange="loadClickSound(this)">
+        🎵 Default · Drop custom file
+      </div>
+      <div style="font-size:0.65rem;color:var(--muted);margin:0.5rem 0 0.3rem">Scroll sound</div>
+      <div class="sound-drop-zone" id="scrollDropZone">
+        <input type="file" accept=".mp3,.wav,.ogg" onchange="loadScrollSound(this)">
+        🎵 Default · Drop custom file
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
