@@ -314,6 +314,7 @@ function stopAudio() {
   NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
   
   applyStaticGlow(glowMode === 'audio' ? 0 : manualGlowVal);
+  d3.select('#glitchDisplacement').attr('scale', 0);
 }
 
 function updateVolume(val) {
@@ -351,6 +352,7 @@ function toggleGlowMode() {
     valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
     
     NG.selectAll('.aura').attr('filter', null);
+    d3.select('#glitchDisplacement').attr('scale', 0);
     applyStaticGlow(manualGlowVal);
   }
 }
@@ -403,19 +405,18 @@ d3.timer(elapsed => {
       
       LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
 
-      // Regenerate true pseudo-random fractal noise roughly 20 frames a second
-      // This kills the "sliding PNG" effect and creates actual TV Static
+      // Regenerate the seed to create true flowing TV static
       d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
 
-      // Map the opacity of the static directly to the audio energy.
-      // 0 energy = completely clean light. High energy = gritty, black static tearing up the glow.
-      let grungeIntensity = smoothedEnergy * 4.5;
-      d3.select('#noiseAlpha').attr('slope', grungeIntensity);
+      // Drive the displacement map scale using the audio energy
+      // 0 energy = perfectly round aura. High energy = violently shredded static aura.
+      let glitchIntensity = smoothedEnergy * 100 * manualGlowVal;
+      d3.select('#glitchDisplacement').attr('scale', glitchIntensity);
     }
   } else {
     if (glowMode === 'audio') {
         smoothedEnergy = 0;
-        d3.select('#noiseAlpha').attr('slope', 0);
+        d3.select('#glitchDisplacement').attr('scale', 0);
     }
   }
 
@@ -774,49 +775,28 @@ allColors.forEach(c => {
   grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
 });
 
-// Dynamic Adaptive TV Static Filter
+// Dynamic Adaptive TV Static Filter utilizing True Displacement
 const staticFilter = defs.append('filter')
   .attr('id', 'tvStatic')
   .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
   
-// Generates true fractal noise
+// Generates high resolution fractal noise
 staticFilter.append('feTurbulence')
   .attr('id', 'noiseGen')
   .attr('type', 'fractalNoise')
-  .attr('baseFrequency', '0.8')
-  .attr('numOctaves', '1')
+  .attr('baseFrequency', '0.9')
+  .attr('numOctaves', '3')
   .attr('seed', '0')
   .attr('result', 'noise');
 
-// Desaturates the noise to a black & white matrix
-staticFilter.append('feColorMatrix')
-  .attr('type', 'matrix')
-  .attr('values', '0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 1 0')
-  .attr('in', 'noise')
-  .attr('result', 'bwNoise');
-
-// Uses the audio energy to push the alpha channel (controlling how gritty the static is)
-const transfer = staticFilter.append('feComponentTransfer')
-  .attr('in', 'bwNoise')
-  .attr('result', 'alphaNoise');
-
-transfer.append('feFuncA')
-  .attr('id', 'noiseAlpha')
-  .attr('type', 'linear')
-  .attr('slope', '0'); // Audio drives this value from 0 (off) to high (heavy grunge)
-
-// Masks the static perfectly into the shape of the radial glow
-staticFilter.append('feComposite')
-  .attr('operator', 'in')
-  .attr('in', 'alphaNoise')
-  .attr('in2', 'SourceGraphic')
-  .attr('result', 'maskedNoise');
-
-// Multiplies the black & white static onto the glow colors
-staticFilter.append('feBlend')
-  .attr('mode', 'multiply')
-  .attr('in', 'maskedNoise')
-  .attr('in2', 'SourceGraphic');
+// Uses the generated noise to physically warp and tear the radial gradient geometry
+staticFilter.append('feDisplacementMap')
+  .attr('id', 'glitchDisplacement')
+  .attr('in', 'SourceGraphic')
+  .attr('in2', 'noise')
+  .attr('scale', '0')
+  .attr('xChannelSelector', 'R')
+  .attr('yChannelSelector', 'G');
 
 const LG = mapLayer.append('g');
 const NG = mapLayer.append('g');
@@ -988,7 +968,7 @@ function update(source) {
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  // Pure Math Radial Gradient Aura
+  // The new decoupled, pure math Radial Gradient Aura
   inner.append('circle')
     .attr('class', 'aura')
     .attr('r', d => nodeR(d) * 4.5) 
