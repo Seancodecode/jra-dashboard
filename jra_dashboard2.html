@@ -553,6 +553,42 @@
     border-bottom-color: var(--accent);
   }
 
+
+  /* ── SOUND SETTINGS ── */
+  .sound-drop-zone {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 0.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    position: relative;
+  }
+  .sound-drop-zone:hover { border-color: var(--accent); color: var(--accent); }
+  .sound-drop-zone.has-file { border-color: rgba(46,204,113,0.4); color: #2ecc71; }
+  .sound-drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+  }
+  .sound-row {
+    display: flex; align-items: center;
+    justify-content: space-between; gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .sound-label { font-size: 0.72rem; color: var(--text); }
+  .volume-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 3px; border-radius: 2px;
+    background: var(--surface2); outline: none; margin-top: 0.4rem;
+    cursor: pointer;
+  }
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+  }
+
   /* ── SEARCH ── */
   .search-bar {
     display: flex;
@@ -1824,6 +1860,135 @@ function setFont(key, family) {
   document.getElementById('font-' + key).classList.add('active');
   localStorage.setItem('jra-font', key);
 }
+
+
+// ── Sound Effects ─────────────────────────────────────────────────────────────
+let soundEnabled = false;
+let soundVolume = 0.3;
+let clickAudioCtx = null;
+let scrollAudioCtx = null;
+let clickBuffer = null;
+let scrollBuffer = null;
+let lastScrollSound = 0;
+const SCROLL_THROTTLE = 120; // ms between scroll sounds
+
+function getAudioCtx() {
+  if (!clickAudioCtx) clickAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return clickAudioCtx;
+}
+
+// Generate default click sound — short soft tick
+function makeDefaultClick() {
+  const ctx = getAudioCtx();
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / ctx.sampleRate;
+    data[i] = Math.sin(2 * Math.PI * 800 * t) * Math.exp(-t * 80) * 0.4;
+  }
+  clickBuffer = buf;
+}
+
+// Generate default scroll sound — softer, higher tick
+function makeDefaultScroll() {
+  const ctx = getAudioCtx();
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / ctx.sampleRate;
+    data[i] = Math.sin(2 * Math.PI * 1200 * t) * Math.exp(-t * 120) * 0.25;
+  }
+  scrollBuffer = buf;
+}
+
+function playBuffer(buffer) {
+  if (!buffer || !soundEnabled) return;
+  const ctx = getAudioCtx();
+  if (ctx.state === 'suspended') ctx.resume();
+  const src = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  gain.gain.value = soundVolume;
+  src.buffer = buffer;
+  src.connect(gain);
+  gain.connect(ctx.destination);
+  src.start();
+}
+
+function playClick() { playBuffer(clickBuffer); }
+function playScroll() {
+  const now = Date.now();
+  if (now - lastScrollSound < SCROLL_THROTTLE) return;
+  lastScrollSound = now;
+  playBuffer(scrollBuffer);
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  document.getElementById('soundToggle').classList.toggle('on', soundEnabled);
+  document.getElementById('soundOptions').style.opacity = soundEnabled ? '1' : '0.4';
+  document.getElementById('soundOptions').style.pointerEvents = soundEnabled ? 'auto' : 'none';
+  if (soundEnabled) {
+    const ctx = getAudioCtx(); // init context on user gesture
+    if (ctx.state === 'suspended') ctx.resume();
+    makeDefaultClick();
+    makeDefaultScroll();
+  }
+  localStorage.setItem('jra-sound', soundEnabled ? '1' : '0');
+  localStorage.setItem('jra-volume', soundVolume);
+}
+
+function updateVolume(val) {
+  soundVolume = parseFloat(val);
+  localStorage.setItem('jra-volume', soundVolume);
+}
+
+async function loadCustomSound(file, type) {
+  const ctx = getAudioCtx();
+  const arrayBuf = await file.arrayBuffer();
+  const audioBuf = await ctx.decodeAudioData(arrayBuf);
+  if (type === 'click') clickBuffer = audioBuf;
+  else scrollBuffer = audioBuf;
+}
+
+function loadClickSound(input) {
+  if (!input.files[0]) return;
+  loadCustomSound(input.files[0], 'click');
+  document.getElementById('clickDropZone').classList.add('has-file');
+  document.getElementById('clickDropZone').childNodes[1].textContent = '✓ ' + input.files[0].name;
+}
+function loadScrollSound(input) {
+  if (!input.files[0]) return;
+  loadCustomSound(input.files[0], 'scroll');
+  document.getElementById('scrollDropZone').classList.add('has-file');
+  document.getElementById('scrollDropZone').childNodes[1].textContent = '✓ ' + input.files[0].name;
+}
+
+// Hook scroll
+let scrollTicking = false;
+window.addEventListener('scroll', () => {
+  if (!scrollTicking) {
+    requestAnimationFrame(() => { playScroll(); scrollTicking = false; });
+    scrollTicking = true;
+  }
+}, { passive: true });
+
+// Hook clicks on interactive elements
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button, .tab-btn, .filter-btn, .font-pill, .preset-dot, .crown-row, tr, .toggle-switch')) {
+    playClick();
+  }
+}, true);
+
+// Restore saved sound prefs
+(function() {
+  const savedSound = localStorage.getItem('jra-sound');
+  const savedVol   = localStorage.getItem('jra-volume');
+  if (savedVol) { soundVolume = parseFloat(savedVol); document.getElementById('volumeSlider').value = soundVolume; }
+  if (savedSound === '1') {
+    // Don't auto-enable — browser will block audio until user gesture
+    // Just restore toggle state visually
+  }
+})();
 
 // ── Restore saved preferences ─────────────────────────────────────────────────
 (function() {
