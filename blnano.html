@@ -398,29 +398,25 @@ d3.timer(elapsed => {
       let sum = 0;
       let limit = Math.floor(dataArray.length * 0.4);
       for(let i = 0; i < limit; i++) sum += dataArray[i];
-      let currentEnergy = Math.min(1, ((sum / limit) / 255) * 1.5);
+      let currentEnergy = Math.min(1, ((sum / limit) / 255));
       smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.3;
       
       LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
 
-      if (smoothedEnergy > 0.01) {
-        d3.select('#noiseOffset')
-          .attr('dx', Math.random() * 500)
-          .attr('dy', Math.random() * 500);
-          
-        let grunge = Math.min(1, smoothedEnergy * 2.5); 
-        let invGrunge = 1 - grunge;
-        
-        d3.select('#noiseIntensity').attr('values', 
-          `${grunge} 0 0 0 ${invGrunge} ` +
-          `0 ${grunge} 0 0 ${invGrunge} ` +
-          `0 0 ${grunge} 0 ${invGrunge} ` +
-          `0 0 0 1 0`
-        );
-      }
+      // Regenerate true pseudo-random fractal noise roughly 20 frames a second
+      // This kills the "sliding PNG" effect and creates actual TV Static
+      d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
+
+      // Map the opacity of the static directly to the audio energy.
+      // 0 energy = completely clean light. High energy = gritty, black static tearing up the glow.
+      let grungeIntensity = smoothedEnergy * 4.5;
+      d3.select('#noiseAlpha').attr('slope', grungeIntensity);
     }
   } else {
-    if (glowMode === 'audio') smoothedEnergy = 0;
+    if (glowMode === 'audio') {
+        smoothedEnergy = 0;
+        d3.select('#noiseAlpha').attr('slope', 0);
+    }
   }
 
   NG.selectAll('g.node-inner').each(function(d) {
@@ -437,7 +433,7 @@ d3.timer(elapsed => {
       
       if (glowMode === 'audio') {
         let energy = Math.pow(normFreq, 2); 
-        let cappedEnergy = energy * manualGlowVal;
+        let cappedEnergy = energy * manualGlowVal; 
         
         el.select('.aura')
           .attr('opacity', Math.min(1, cappedEnergy * 1.5))
@@ -778,34 +774,49 @@ allColors.forEach(c => {
   grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
 });
 
-// Dynamic TV Static Texture Filter
+// Dynamic Adaptive TV Static Filter
 const staticFilter = defs.append('filter')
   .attr('id', 'tvStatic')
   .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
   
+// Generates true fractal noise
 staticFilter.append('feTurbulence')
+  .attr('id', 'noiseGen')
   .attr('type', 'fractalNoise')
-  .attr('baseFrequency', '1.2')
-  .attr('numOctaves', '2')
+  .attr('baseFrequency', '0.8')
+  .attr('numOctaves', '1')
+  .attr('seed', '0')
   .attr('result', 'noise');
-  
-staticFilter.append('feOffset')
-  .attr('id', 'noiseOffset')
-  .attr('dx', '0').attr('dy', '0')
-  .attr('in', 'noise')
-  .attr('result', 'movedNoise');
-  
+
+// Desaturates the noise to a black & white matrix
 staticFilter.append('feColorMatrix')
-  .attr('id', 'noiseIntensity')
   .attr('type', 'matrix')
-  .attr('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0')
-  .attr('in', 'movedNoise')
-  .attr('result', 'controlledNoise');
-  
+  .attr('values', '0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 1 0')
+  .attr('in', 'noise')
+  .attr('result', 'bwNoise');
+
+// Uses the audio energy to push the alpha channel (controlling how gritty the static is)
+const transfer = staticFilter.append('feComponentTransfer')
+  .attr('in', 'bwNoise')
+  .attr('result', 'alphaNoise');
+
+transfer.append('feFuncA')
+  .attr('id', 'noiseAlpha')
+  .attr('type', 'linear')
+  .attr('slope', '0'); // Audio drives this value from 0 (off) to high (heavy grunge)
+
+// Masks the static perfectly into the shape of the radial glow
+staticFilter.append('feComposite')
+  .attr('operator', 'in')
+  .attr('in', 'alphaNoise')
+  .attr('in2', 'SourceGraphic')
+  .attr('result', 'maskedNoise');
+
+// Multiplies the black & white static onto the glow colors
 staticFilter.append('feBlend')
   .attr('mode', 'multiply')
-  .attr('in', 'SourceGraphic')
-  .attr('in2', 'controlledNoise');
+  .attr('in', 'maskedNoise')
+  .attr('in2', 'SourceGraphic');
 
 const LG = mapLayer.append('g');
 const NG = mapLayer.append('g');
