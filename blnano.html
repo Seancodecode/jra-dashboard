@@ -4,36 +4,37 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
-  body{margin:0;background:#0d0d12;overflow:hidden;font-family:system-ui,sans-serif;}
+  body{margin:0;background:#050508;overflow:hidden;font-family:system-ui,sans-serif;}
   #cv{width:100%;height:100vh;}
 
-  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:155px;}
+  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:165px;}
   .btn{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:monospace;
     background:rgba(15,15,22,0.92);border:1px solid rgba(255,255,255,0.12);border-radius:6px;
     padding:6px 12px;color:rgba(255,255,255,0.45);cursor:pointer;transition:all .2s;text-align:center;}
-  .btn:hover{border-color:#e8335a;color:#e8335a;}
+  .btn:hover{border-color:#00c9a7;color:#00c9a7;text-shadow:0 0 8px rgba(0,201,167,0.5);}
   .fetch-btn{border-color:#d4af37;color:#d4af37;}
-  .fetch-btn:hover{background:rgba(212,175,55,0.1);}
+  .fetch-btn:hover{background:rgba(212,175,55,0.1);border-color:#ffd700;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.5);}
 
-  .ctrl-box{background:rgba(15,15,22,0.92);border:1px solid rgba(255,255,255,0.12);
-    padding:8px 10px;border-radius:6px;}
+  .ctrl-box{background:rgba(10,10,15,0.85);border:1px solid rgba(255,255,255,0.1);
+    padding:8px 10px;border-radius:6px;backdrop-filter:blur(8px);}
   .ctrl-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
   .ctrl-label{font-size:9px;color:rgba(255,255,255,0.4);font-family:monospace;
     text-transform:uppercase;letter-spacing:1px;}
   .ctrl-val{font-size:10px;color:#d4af37;font-family:monospace;}
-  input[type=range]{width:100%;cursor:pointer;accent-color:#e8335a;margin:0;}
+  input[type=range]{width:100%;cursor:pointer;accent-color:#00c9a7;margin:0;}
 
-  #tip{position:absolute;background:#1a1a26;border:1px solid rgba(255,255,255,0.1);
-    border-radius:10px;padding:10px 14px;font-size:13px;color:#f0f0f0;
-    box-shadow:0 8px 32px rgba(0,0,0,0.6);opacity:0;transition:opacity .2s;z-index:30;max-width:200px;
-    pointer-events:auto;left:-9999px;}
-  #tip a:hover{color:#fff !important;text-shadow:0 0 8px rgba(79,195,247,0.8);}
+  #tip{position:absolute;background:rgba(15,15,22,0.95);border:1px solid rgba(255,255,255,0.15);
+    border-radius:8px;padding:12px 16px;font-size:13px;color:#f0f0f0;
+    box-shadow:0 10px 40px rgba(0,0,0,0.8);opacity:0;transition:opacity .2s;z-index:30;max-width:220px;
+    pointer-events:auto;left:-9999px;backdrop-filter:blur(10px);}
+  #tip a:hover{color:#fff !important;text-shadow:0 0 10px rgba(79,195,247,0.8);}
 
-  .hint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
-    font-size:10px;color:rgba(255,255,255,0.18);letter-spacing:1px;font-family:monospace;
+  .hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+    font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:1px;font-family:monospace;
     pointer-events:none;white-space:nowrap;}
   #welcome{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    color:rgba(255,255,255,0.3);font-family:monospace;text-align:center;pointer-events:none;}
+    color:rgba(255,255,255,0.4);font-family:monospace;text-align:center;pointer-events:none;
+    text-shadow:0 0 10px rgba(255,255,255,0.1);}
 
   #rankToggle{
     position:fixed;right:0;top:50%;transform:translateY(-50%);
@@ -45,21 +46,21 @@
     transition:right .35s cubic-bezier(.4,0,.2,1), border-color .2s;
     user-select:none;
   }
-  #rankToggle:hover{border-color:#d4af37;}
+  #rankToggle:hover{border-color:#d4af37;box-shadow:0 0 15px rgba(212,175,55,0.3);}
   #rankToggle .rt-icon{font-size:15px;line-height:1;}
   #rankToggle .rt-label{
     font-size:8px;letter-spacing:2px;text-transform:uppercase;font-family:monospace;
-    color:rgba(255,255,255,0.35);writing-mode:vertical-rl;
+    color:rgba(255,255,255,0.4);writing-mode:vertical-rl;
   }
 
   #rankPanel{
     position:fixed;right:-300px;top:0;height:100vh;width:300px;
-    background:rgba(10,10,16,0.98);border-left:1px solid rgba(255,255,255,0.09);
+    background:rgba(10,10,15,0.92);border-left:1px solid rgba(255,255,255,0.1);
     z-index:35;display:flex;flex-direction:column;
     transition:right .35s cubic-bezier(.4,0,.2,1);
-    backdrop-filter:blur(16px);
+    backdrop-filter:blur(20px);
   }
-  #rankPanel.open{right:0;}
+  #rankPanel.open{right:0;box-shadow:-10px 0 50px rgba(0,0,0,0.8);}
 
   .rp-header{
     padding:22px 18px 14px;
@@ -68,41 +69,41 @@
   }
   .rp-eyebrow{font-family:monospace;font-size:9px;letter-spacing:2px;
     text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:4px;}
-  .rp-title{font-size:19px;font-weight:700;color:#d4af37;letter-spacing:.5px;}
+  .rp-title{font-size:19px;font-weight:700;color:#d4af37;letter-spacing:.5px;text-shadow:0 0 10px rgba(212,175,55,0.4);}
   .rp-sub{font-size:10px;color:rgba(255,255,255,0.2);margin-top:3px;font-family:monospace;}
 
   .rp-list{overflow-y:auto;flex:1;padding:6px 0;}
   .rp-list::-webkit-scrollbar{width:3px;}
-  .rp-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px;}
+  .rp-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px;}
 
   .rp-row{
     display:flex;align-items:center;gap:10px;
     padding:7px 16px;cursor:pointer;
     transition:background .15s;border-left:2px solid transparent;
   }
-  .rp-row:hover{background:rgba(255,255,255,0.04);border-left-color:rgba(212,175,55,0.4);}
-  .rp-row.active{background:rgba(212,175,55,0.06);border-left-color:#d4af37;}
+  .rp-row:hover{background:rgba(255,255,255,0.05);border-left-color:rgba(212,175,55,0.5);}
+  .rp-row.active{background:rgba(212,175,55,0.08);border-left-color:#d4af37;}
 
   .rp-rank{font-family:monospace;font-size:11px;width:24px;
     text-align:right;flex-shrink:0;color:rgba(255,255,255,0.2);}
-  .rp-rank.gold  {color:#d4af37;font-size:14px;}
-  .rp-rank.silver{color:#a8a9ad;font-size:14px;}
-  .rp-rank.bronze{color:#cd7f32;font-size:14px;}
+  .rp-rank.gold  {color:#ffd700;font-size:14px;text-shadow:0 0 8px rgba(255,215,0,0.6);}
+  .rp-rank.silver{color:#c0c0c0;font-size:14px;text-shadow:0 0 8px rgba(192,192,192,0.6);}
+  .rp-rank.bronze{color:#cd7f32;font-size:14px;text-shadow:0 0 8px rgba(205,127,50,0.6);}
 
   .rp-info{flex:1;min-width:0;}
-  .rp-name{font-size:12px;font-weight:600;color:#eee;
+  .rp-name{font-size:12px;font-weight:600;color:#fff;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .rp-era{font-size:9px;color:rgba(255,255,255,0.25);margin-top:1px;}
+  .rp-era{font-size:9px;color:rgba(255,255,255,0.3);margin-top:1px;}
 
   .rp-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
   .rp-g1{font-family:monospace;font-size:13px;font-weight:700;color:#d4af37;}
   .rp-bar{width:52px;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;}
   .rp-bar-fill{height:100%;border-radius:2px;
-    background:linear-gradient(90deg,#d4af37 0%,#e8335a 100%);}
+    background:linear-gradient(90deg,#d4af37 0%,#ff3366 100%);box-shadow:0 0 5px rgba(255,51,102,0.5);}
 
   .rp-footer{
     padding:10px 16px;border-top:1px solid rgba(255,255,255,0.07);
-    font-size:8px;color:rgba(255,255,255,0.15);font-family:monospace;
+    font-size:8px;color:rgba(255,255,255,0.2);font-family:monospace;
     letter-spacing:1px;text-transform:uppercase;flex-shrink:0;line-height:1.6;
   }
 </style>
@@ -113,11 +114,11 @@
 
 <div class="ctrls">
   <button class="btn fetch-btn" onclick="fetchData()">Load from Supabase</button>
-  <button class="btn" onclick="resetTree()">Reset</button>
+  <button class="btn" onclick="resetTree()">Reset View</button>
 
   <div class="ctrl-box">
     <div class="ctrl-row">
-      <span class="ctrl-label">Depth</span>
+      <span class="ctrl-label">Depth Limit</span>
       <span class="ctrl-val" id="levelVal">0 / 0</span>
     </div>
     <input type="range" id="levelSlider" min="0" max="10" step="1" value="0"
@@ -126,7 +127,7 @@
 
   <div class="ctrl-box">
     <div class="ctrl-row">
-      <span class="ctrl-label">Spread</span>
+      <span class="ctrl-label">Ring Spread</span>
       <span class="ctrl-val" id="spreadVal">1.0x</span>
     </div>
     <input type="range" min="0.5" max="3" step="0.1" value="1"
@@ -151,6 +152,13 @@
     </div>
     <input type="range" id="wobbleSpeed" min="0.5" max="5" step="0.1" value="2"
            oninput="wobbleSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Energy Flow</span>
+      <button class="btn" id="spectrumBtn" onclick="toggleSpectrum()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="spectrumSpeed" min="0.5" max="5" step="0.1" value="2"
+           oninput="spectrumSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
 
     <div class="ctrl-row">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">Float & Bounce</span>
@@ -187,16 +195,17 @@ let root = null;
 let spreadFactor = 1;
 let maxDepth = 0;
 
-// Master animation variables
-let globalTime  = 0;
-let isWaveOn    = false;
-let waveSpeed   = 1;
-let isWobbleOn  = false;
-let wobbleSpeed = 2;
-let isFloatOn   = false;
-let floatSim    = null;
+let globalTime    = 0;
+let isWaveOn      = false;
+let waveSpeed     = 1;
+let isWobbleOn    = false;
+let wobbleSpeed   = 2;
+let isSpectrumOn  = false;
+let spectrumSpeed = 2;
+let isFloatOn     = false;
+let floatSim      = null;
 
-// Global render loop to handle physics and sine waves
+// Global animation loop
 d3.timer(elapsed => {
   globalTime = elapsed;
   
@@ -208,8 +217,11 @@ d3.timer(elapsed => {
     });
   }
 
-  // If float is running, it triggers redrawLinksFast inside its tick event.
-  // We only need to manually call it here if wobble is on but float is off.
+  if (isSpectrumOn) {
+    LG.selectAll('path').attr('stroke-dashoffset', () => -globalTime * 0.02 * spectrumSpeed);
+  }
+
+  // Redraw strings if wobbling without floating
   if (isWobbleOn && !isFloatOn) {
     redrawLinksFast();
   }
@@ -245,12 +257,12 @@ function updateSpacing(val) {
 
 function toggleWave() {
   isWaveOn = !isWaveOn;
-  const btn    = document.getElementById('waveBtn');
+  const btn = document.getElementById('waveBtn');
   const slider = document.getElementById('waveSpeed');
   if (isWaveOn) {
     btn.textContent = 'ON';
-    btn.style.color = '#00c9a7';
-    btn.style.borderColor = '#00c9a7';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
     slider.style.opacity = '1';
   } else {
     btn.textContent = 'OFF';
@@ -263,12 +275,12 @@ function toggleWave() {
 
 function toggleWobble() {
   isWobbleOn = !isWobbleOn;
-  const btn    = document.getElementById('wobbleBtn');
+  const btn = document.getElementById('wobbleBtn');
   const slider = document.getElementById('wobbleSpeed');
   if (isWobbleOn) {
     btn.textContent = 'ON';
-    btn.style.color = '#00c9a7';
-    btn.style.borderColor = '#00c9a7';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
     slider.style.opacity = '1';
   } else {
     btn.textContent = 'OFF';
@@ -279,14 +291,34 @@ function toggleWobble() {
   }
 }
 
+function toggleSpectrum() {
+  isSpectrumOn = !isSpectrumOn;
+  const btn = document.getElementById('spectrumBtn');
+  const slider = document.getElementById('spectrumSpeed');
+  if (isSpectrumOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '1';
+    LG.selectAll('path').attr('stroke-dasharray', '8, 16').attr('stroke-linecap', 'round');
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
+    LG.selectAll('path').attr('stroke-dasharray', 'none').attr('stroke-dashoffset', '0');
+  }
+}
+
 function toggleFloat() {
   isFloatOn = !isFloatOn;
   const btn = document.getElementById('floatBtn');
   
   if (isFloatOn) {
     btn.textContent = 'ON';
-    btn.style.color = '#00c9a7';
-    btn.style.borderColor = '#00c9a7';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
     
     const nodes = root.descendants();
     nodes.forEach(d => {
@@ -297,19 +329,17 @@ function toggleFloat() {
     floatSim = d3.forceSimulation(nodes)
       .alphaDecay(0)
       .velocityDecay(0.15)
-      .force('collide', d3.forceCollide().radius(d => nodeR(d) + 5).iterations(2))
-      .force('x', d3.forceX(d => d.cartX0).strength(0.03))
-      .force('y', d3.forceY(d => d.cartY0).strength(0.03))
+      .force('collide', d3.forceCollide().radius(d => nodeR(d) + 8).iterations(2))
+      .force('x', d3.forceX(d => d.cartX0).strength(0.04))
+      .force('y', d3.forceY(d => d.cartY0).strength(0.04))
       .on('tick', () => {
          nodes.forEach(d => {
            if (!d.data.ox) {
-             // Inject a little Brownian motion for the floaty aesthetic
-             d.vx += (Math.random() - 0.5) * 0.4;
-             d.vy += (Math.random() - 0.5) * 0.4;
+             d.vx += (Math.random() - 0.5) * 0.5;
+             d.vy += (Math.random() - 0.5) * 0.5;
              d.cartX = d.x;
              d.cartY = d.y;
            } else {
-             // Lock to mouse if dragged
              d.x = d.data.ox;
              d.y = d.data.oy;
              d.cartX = d.data.ox;
@@ -323,6 +353,7 @@ function toggleFloat() {
     btn.textContent = 'OFF';
     btn.style.color = '';
     btn.style.borderColor = '';
+    btn.style.boxShadow = 'none';
     
     if (floatSim) {
        floatSim.stop();
@@ -436,34 +467,35 @@ function pulseNode(id) {
     .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
     .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
     .transition().duration(300).attr('r', d => nodeR(d))
-      .attr('fill-opacity', d => d.data.g1 > 0 ? 0.78 : 0.15);
+      .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.2));
 }
 
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2VmbGF5a3R4eWppZHZrZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODQyMjMsImV4cCI6MjA5NTY2MDIyM30.Yq0sdcWYzB0rQyMdXlOAwFAi1wFrHkJcdYs-0Z6uJvU';
 const db = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+// Swapped colors to extremely vibrant pure hexes for the neon effect
 const colorScale = d3.scaleOrdinal([
-  '#e8335a','#00c9a7','#9b59b6','#3a7bd5','#ff7043',
-  '#ec407a','#ab47bc','#26c6da','#66bb6a','#ffa726','#cddc39','#8d6e63'
+  '#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500',
+  '#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222'
 ]);
 
 function bcolor(d){
-  if (d.id === 'root') return '#d4af37';
+  if (d.id === 'root') return '#ffd700';
   let c = d;
   while (c.parent && c.parent.id !== 'root') c = c.parent;
   return colorScale(c.id);
 }
 
 function nodeR(d){
-  if (d.id === 'root') return 32;
+  if (d.id === 'root') return 34;
   const g1 = d.data.g1 || 0;
-  if (g1 >= 10) return 20; if (g1 >= 7) return 17;
-  if (g1 >= 4)  return 13; if (g1 >= 1) return 10;
+  if (g1 >= 10) return 22; if (g1 >= 7) return 18;
+  if (g1 >= 4)  return 14; if (g1 >= 1) return 11;
   return 7;
 }
 
-const RADII = [0, 150, 320, 500, 680, 850, 1020];
+const RADII = [0, 160, 340, 520, 700, 880, 1060];
 
 const svg  = d3.select('#cv').append('svg').attr('width', W).attr('height', H);
 let zoomT  = d3.zoomIdentity;
@@ -474,11 +506,14 @@ const zoom = d3.zoom().scaleExtent([0.05, 8]).on('zoom', e => {
 svg.call(zoom);
 const g = svg.append('g');
 
+// Upgraded double-layered Neon Glow filter
 const defs = svg.append('defs');
-const gf   = defs.append('filter').attr('id', 'gl');
-gf.append('feGaussianBlur').attr('stdDeviation', '5').attr('result', 'b');
+const gf   = defs.append('filter').attr('id', 'gl').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
+gf.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'blur1');
+gf.append('feGaussianBlur').attr('stdDeviation', '12').attr('result', 'blur2');
 const fm   = gf.append('feMerge');
-fm.append('feMergeNode').attr('in', 'b');
+fm.append('feMergeNode').attr('in', 'blur2');
+fm.append('feMergeNode').attr('in', 'blur1');
 fm.append('feMergeNode').attr('in', 'SourceGraphic');
 
 const LG = g.append('g');
@@ -494,17 +529,17 @@ function showTip(e, d){
   const c = bcolor(d);
   let linkHtml = '';
   if (d.id !== 'root') {
-    linkHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
+    linkHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);">
       <a href="https://db.netkeiba.com/horse/${d.id}" target="_blank"
-         style="color:#4fc3f7;text-decoration:none;font-size:11px;font-family:monospace;">
+         style="color:#00ffcc;text-decoration:none;font-size:11px;font-family:monospace;text-shadow:0 0 5px rgba(0,255,204,0.5);">
         View on Netkeiba ↗
       </a></div>`;
   }
   tipEl.innerHTML =
-    `<div style="font-weight:600;color:${c};font-size:14px;margin-bottom:3px">${d.data.name}</div>` +
-    (d.data.g1 ? `<div style="color:${c};font-size:20px;font-family:monospace;line-height:1;margin-bottom:3px">${d.data.g1} G1</div>` : '') +
-    (d.data.era ? `<div style="color:#6b6b80;font-size:12px">${d.data.era}</div>` : '') +
-    (d._children ? `<div style="color:rgba(255,255,255,0.22);font-size:11px;margin-top:4px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
+    `<div style="font-weight:700;color:${c};font-size:15px;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.name}</div>` +
+    (d.data.g1 ? `<div style="color:${c};font-size:22px;font-family:monospace;line-height:1;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.g1} G1</div>` : '') +
+    (d.data.era ? `<div style="color:#8888aa;font-size:12px">${d.data.era}</div>` : '') +
+    (d._children ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
     linkHtml;
   tipEl.style.opacity = '1';
   tipEl.style.left    = (e.clientX + 15) + 'px';
@@ -614,36 +649,40 @@ function update(source) {
   const inner = enter.append('g').attr('class', 'node-inner');
 
   inner.filter(d => d.id === 'root').append('circle')
-    .attr('r', 52).attr('fill', 'none').attr('stroke', '#d4af37')
-    .attr('stroke-width', 0.5).attr('opacity', 0.15).attr('filter', 'url(#gl)');
+    .attr('r', 55).attr('fill', 'none').attr('stroke', '#ffd700')
+    .attr('stroke-width', 1).attr('opacity', 0.25).attr('filter', 'url(#gl)');
 
   inner.append('circle')
     .attr('class', 'main-node')
     .attr('r', d => nodeR(d))
-    .attr('fill', d => (d.data.g1 > 0 || d.id === 'root') ? bcolor(d) : 'transparent')
-    .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.78 : 0.15))
+    .attr('fill', d => (d.data.g1 > 0 || d.id === 'root') ? bcolor(d) : '#1a1a26')
+    .attr('fill-opacity', d => d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.85 : 0.5))
     .attr('stroke', d => bcolor(d))
-    .attr('stroke-width', d => d.id === 'root' ? 0 : 1.5)
-    .attr('stroke-opacity', 0.7)
-    .attr('filter', d => (d.id === 'root' || d.data.g1 >= 5) ? 'url(#gl)' : null);
+    .attr('stroke-width', d => d.id === 'root' ? 0 : 2)
+    .attr('stroke-opacity', 0.9)
+    .attr('filter', 'url(#gl)');
 
   inner.append('text').text(d => d.data.name)
-    .attr('dy', d => nodeR(d) + 14).attr('text-anchor', 'middle')
-    .attr('font-size', d => d.id === 'root' ? '14px' : (d.data.g1 >= 5 ? '12px' : '10px'))
+    .attr('dy', d => nodeR(d) + 16).attr('text-anchor', 'middle')
+    .attr('font-size', d => d.id === 'root' ? '15px' : (d.data.g1 >= 5 ? '13px' : '11px'))
     .attr('font-weight', d => (d.id === 'root' || d.data.g1 >= 5) ? '800' : '600')
-    .attr('fill', d => d.id === 'root' ? '#fff' : (d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.75)'))
-    .attr('pointer-events', 'none');
+    .attr('fill', d => d.id === 'root' ? '#fff' : (d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)'))
+    .attr('pointer-events', 'none')
+    .style('text-shadow', d => d.data.g1 > 0 ? `0 0 10px ${bcolor(d)}` : 'none');
 
   inner.filter(d => d.data.g1 >= 2).append('text')
     .text(d => d.data.g1 + 'G1')
-    .attr('dy', d => -nodeR(d) - 6).attr('text-anchor', 'middle')
-    .attr('font-size', '10px').attr('font-family', 'monospace').attr('font-weight', '800')
-    .attr('fill', d => bcolor(d)).attr('pointer-events', 'none');
+    .attr('dy', d => -nodeR(d) - 8).attr('text-anchor', 'middle')
+    .attr('font-size', '11px').attr('font-family', 'monospace').attr('font-weight', '800')
+    .attr('fill', '#fff')
+    .attr('pointer-events', 'none')
+    .style('text-shadow', d => `0 0 8px ${bcolor(d)}, 0 0 15px ${bcolor(d)}`);
 
   inner.filter(d => d._children).append('text')
     .attr('class', 'pm')
     .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
-    .attr('font-size', '12px').attr('fill', d => bcolor(d)).attr('fill-opacity', 0.65)
+    .attr('font-size', '14px').attr('font-weight', 'bold')
+    .attr('fill', d => bcolor(d)).attr('fill-opacity', 0.8)
     .attr('pointer-events', 'none')
     .text(d => d.children ? '-' : '+');
 
@@ -658,18 +697,22 @@ function update(source) {
     .attr('opacity', 0).remove();
 
   const lk = LG.selectAll('path').data(links, d => d.source.id + '-' + d.target.id);
+  
   lk.enter().append('path')
     .attr('fill', 'none')
     .attr('stroke', d => bcolor(d.target))
-    .attr('stroke-width', d => d.source.id === 'root' ? 2 : 1.3)
+    .attr('stroke-width', d => d.source.id === 'root' ? 3.5 : 2)
     .attr('stroke-opacity', 0)
+    .attr('filter', 'url(#gl)')
     .attr('d', d => {
       const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy, depth: 0 };
       return linkPath(o, o);
     })
     .merge(lk)
+    .attr('stroke-dasharray', isSpectrumOn ? '8, 16' : 'none')
+    .attr('stroke-linecap', isSpectrumOn ? 'round' : 'butt')
     .transition().duration(400)
-    .attr('stroke-opacity', d => d.source.id === 'root' ? 0.55 : 0.35)
+    .attr('stroke-opacity', d => d.source.id === 'root' ? 0.75 : 0.5)
     .attr('d', d => linkPath(d.source, d.target));
 
   lk.exit().transition().duration(400)
@@ -681,7 +724,7 @@ function update(source) {
 
   nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
 
-  // Update physics engine if a node was clicked open while floating is turned on
+  // Dynamically feed all active nodes into the physics engine if it is running
   if (isFloatOn && floatSim) {
     const currentNodes = root.descendants();
     floatSim.nodes(currentNodes);
@@ -689,9 +732,10 @@ function update(source) {
       if (d.x === undefined || isNaN(d.x)) {
          d.x = source.cartX0 || cx; 
          d.y = source.cartY0 || cy;
+         d.vx = 0; d.vy = 0;
       }
     });
-    floatSim.alpha(1).restart();
+    floatSim.alpha(0.5).restart();
   }
 }
 
