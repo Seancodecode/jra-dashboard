@@ -754,13 +754,13 @@
   <div class="section-label">All-Time Leaders</div>
   <div class="card" style="margin-bottom:1.5rem">
     <div class="tab-bar">
-      <button class="tab-btn active" onclick="switchTab('wins',this)">Wins, Jockeys</button>
-      <button class="tab-btn" onclick="switchTab('wins-h',this)">Wins, Horses</button>
-      <button class="tab-btn" onclick="switchTab('wins-t',this)">Wins, Trainers</button>
+      <button class="tab-btn active" onclick="switchTab('wins',this)">G1 Wins, Jockeys</button>
+      <button class="tab-btn" onclick="switchTab('wins-h',this)">G1 Wins, Horses</button>
+      <button class="tab-btn" onclick="switchTab('wins-t',this)">G1 Wins, Trainers</button>
       <button class="tab-btn" onclick="switchTab('earn-h',this)">Earnings, Horses</button>
       <button class="tab-btn" onclick="switchTab('earn-j',this)">Earnings, Jockeys</button>
-      <button class="tab-btn" onclick="switchTab('chart-h',this)">Horse Wins by Year</button>
-      <button class="tab-btn" onclick="switchTab('chart-j',this)">Jockey Wins by Year</button>
+      <button class="tab-btn" onclick="switchTab('chart-h',this)">G1 Wins by Year, Horses</button>
+      <button class="tab-btn" onclick="switchTab('chart-j',this)">G1 Wins by Year, Jockeys</button>
       <a href="blnano.html" class="tab-btn" style="text-decoration: none; color: var(--g1); margin-left: auto; border-bottom: 2px solid transparent;" target="_blank">G1 Winner Pedigree Map ↗</a>
     </div>
 
@@ -1024,6 +1024,12 @@
 </div>
 
 <script>
+// Global state specifically to fix reference errors on the line charts
+let CHART_YEARS = [];
+let TOP_HORSES = [];
+let TOP_JOCKEYS = [];
+let HORSE_YWINS = {};
+let JOCKEY_YWINS = {};
 
 const SUPABASE_URL = 'https://mfmarygiuwqkzgjtxzjt.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbWFyeWdpdXdxa3pnanR4emp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDE1MDgsImV4cCI6MjA5NTYxNzUwOH0.ME7XrirDYn0QuAe0aWR9kvigHqXFYRv4tu9UzTFeHDo';
@@ -1102,21 +1108,19 @@ async function loadDashboard() {
       }
     });
 
-    // Top jockeys by wins
+    // BAR CHARTS: Strictly G1 Winners this time
     const jockeyWins = {};
-    winners.forEach(r => { jockeyWins[r.jockey_name] = (jockeyWins[r.jockey_name] || 0) + 1; });
+    g1Winners.forEach(r => { jockeyWins[r.jockey_name] = (jockeyWins[r.jockey_name] || 0) + 1; });
     const topJockeys = Object.entries(jockeyWins).sort((a,b) => b[1]-a[1]).slice(0,15)
       .map(([name,wins]) => ({name,wins}));
 
-    // Top horses by wins
     const horseWins = {};
-    winners.forEach(r => { horseWins[r.horse_name] = (horseWins[r.horse_name] || 0) + 1; });
+    g1Winners.forEach(r => { horseWins[r.horse_name] = (horseWins[r.horse_name] || 0) + 1; });
     const topHorses = Object.entries(horseWins).sort((a,b) => b[1]-a[1]).slice(0,15)
       .map(([name,wins]) => ({name,wins}));
 
-    // Top trainers by wins
     const trainerWins = {};
-    winners.forEach(r => { trainerWins[r.trainer_name] = (trainerWins[r.trainer_name] || 0) + 1; });
+    g1Winners.forEach(r => { trainerWins[r.trainer_name] = (trainerWins[r.trainer_name] || 0) + 1; });
     const topTrainers = Object.entries(trainerWins).sort((a,b) => b[1]-a[1]).slice(0,15)
       .map(([name,wins]) => ({name,wins}));
 
@@ -1138,10 +1142,9 @@ async function loadDashboard() {
       if(yr) yearPrize[yr] = (yearPrize[yr]||0) + (r.prize_10k_jpy||0);
     });
 
-    // TOP 8 G1 WINNERS FOR CHARTS
+    // TOP 8 G1 WINNERS FOR LINE CHARTS
     const allYears = [...new Set(allRaces.map(r => +r.race_date?.slice(0,4)))].filter(Boolean).sort();
 
-    // 1. Get Top 8 Horses by G1 Wins
     const horseG1WinsCount = {};
     g1Winners.forEach(r => { 
       horseG1WinsCount[r.horse_name] = (horseG1WinsCount[r.horse_name] || 0) + 1; 
@@ -1151,7 +1154,6 @@ async function loadDashboard() {
       .slice(0, 8)
       .map(x => x[0]);
 
-    // 2. Get Top 8 Jockeys by G1 Wins
     const jockeyG1WinsCount = {};
     g1Winners.forEach(r => { 
       jockeyG1WinsCount[r.jockey_name] = (jockeyG1WinsCount[r.jockey_name] || 0) + 1; 
@@ -1161,7 +1163,6 @@ async function loadDashboard() {
       .slice(0, 8)
       .map(x => x[0]);
 
-    // 3. Tally G1 wins per year for these horses
     const horseYearWins = {};
     top8G1Horses.forEach(h => {
       horseYearWins[h] = {};
@@ -1172,7 +1173,6 @@ async function loadDashboard() {
       if(horseYearWins[r.horse_name]) horseYearWins[r.horse_name][yr]++;
     });
 
-    // 4. Tally G1 wins per year for these jockeys
     const jockeyYearWins = {};
     top8G1Jockeys.forEach(j => {
       jockeyYearWins[j] = {};
@@ -1183,12 +1183,12 @@ async function loadDashboard() {
       if(jockeyYearWins[r.jockey_name]) jockeyYearWins[r.jockey_name][yr]++;
     });
 
-    // Update year charts global variables
-    window.CHART_YEARS  = allYears;
-    window.TOP_HORSES   = top8G1Horses;
-    window.TOP_JOCKEYS  = top8G1Jockeys;
-    window.HORSE_YWINS  = horseYearWins;
-    window.JOCKEY_YWINS = jockeyYearWins;
+    // Lock the global variables so the graphs actually work
+    CHART_YEARS = allYears;
+    TOP_HORSES = top8G1Horses;
+    TOP_JOCKEYS = top8G1Jockeys;
+    HORSE_YWINS = horseYearWins;
+    JOCKEY_YWINS = jockeyYearWins;
 
     buildLegend('horseLegend', top8G1Horses, horseHidden, CHART_COLORS, drawHorseChart);
     buildLegend('jockeyLegend', top8G1Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
@@ -1314,7 +1314,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
     ctx.moveTo(pad.left, y);
     ctx.lineTo(pad.left + cw, y);
     ctx.stroke();
-    if (tooltipId) { // only label on large chart
+    if (tooltipId) { 
       ctx.fillStyle = textColor;
       ctx.font = '9px DM Mono, monospace';
       ctx.textAlign = 'right';
@@ -1399,7 +1399,7 @@ function drawPrizeChart(canvasId, tooltipId, padding) {
       });
       const d = PRIZE_DATA[closest];
       const tip = document.getElementById(tooltipId);
-      if (tip) tip.textContent = d.year + (d.year === 2021 ? '*' : '') + '  ,  ¥' + d.prize_100m + 'B JPY' + (d.year === 2021 ? '  (partial year, data ends July 2021)' : '');
+      if (tip) tip.textContent = d.year + (d.year === 2021 ? '*' : '') + ' , ¥' + d.prize_100m + 'B JPY' + (d.year === 2021 ? ' (partial year, data ends July 2021)' : '');
       // Redraw with highlight
       drawPrizeChart(canvasId, null, padding);
       ctx.scale(dpr, dpr);
@@ -1452,7 +1452,6 @@ function renderBars(containerId, data, maxVal) {
       </div>`;
   });
 }
-// rendered by loadDashboard()
 
 // Earnings bars
 function renderEarnBars(containerId, data) {
@@ -1488,7 +1487,7 @@ function drawYearChart(canvasId, labels, dataMap, hiddenMap, tooltipId, colorArr
   const pad = {top:20, right:20, bottom:28, left:36};
   const cw = W - pad.left - pad.right;
   const ch = H - pad.top - pad.bottom;
-  const n = (window.CHART_YEARS||[]).length;
+  const n = (CHART_YEARS||[]).length;
 
   const allVals = labels.flatMap(l => !hiddenMap[l] ? Object.values(dataMap[l] || {}) : []);
   const maxV = Math.max(...allVals, 1);
@@ -1507,346 +1506,3 @@ function drawYearChart(canvasId, labels, dataMap, hiddenMap, tooltipId, colorArr
     ctx.textAlign = 'right';
     ctx.fillText(Math.round(maxV * g/4), pad.left-4, y+3);
   }
-
-  // Year labels
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font = '9px DM Mono, monospace';
-  ctx.textAlign = 'center';
-  (window.CHART_YEARS||[]).forEach((y, i) => {
-    if (y % 5 === 0) ctx.fillText(y === 2021 ? '21*' : y, xPos(i), pad.top+ch+16);
-  });
-
-  // Lines
-  labels.forEach((label, li) => {
-    if (hiddenMap[label]) return;
-    const col = colorArr[li % colorArr.length];
-    const pts = CHART_YEARS.map((y,i) => [xPos(i), yPos((dataMap[label]||{})[y]||0)]);
-    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    pts.forEach(([x,y], i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
-    ctx.stroke();
-    pts.forEach(([x,y], i) => {
-      const v = (dataMap[label]||{})[CHART_YEARS[i]]||0;
-      if (v === 0) return;
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2);
-      ctx.fillStyle = col; ctx.fill();
-    });
-  });
-
-  // Hover
-  canvas.onmousemove = function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    let ci = 0, md = Infinity;
-    (window.CHART_YEARS||[]).forEach((_,i) => { const d = Math.abs(xPos(i)-mx); if(d<md){md=d;ci=i;} });
-    const yr = CHART_YEARS[ci];
-    const parts = labels.filter(l=>!hiddenMap[l]).map(l => {
-      const v = (dataMap[l]||{})[yr]||0;
-      return v > 0 ? l + ': ' + v : null;
-    }).filter(Boolean);
-    const tip = document.getElementById(tooltipId);
-    if (tip) tip.textContent = yr + (yr===2021?'*':'') + '  ,  ' + (parts.length ? parts.join('  ,  ') : 'No wins');
-  };
-  canvas.onmouseleave = function() {
-    const tip = document.getElementById(tooltipId);
-    if (tip) tip.textContent = '';
-  };
-}
-
-function buildLegend(containerId, labels, hiddenMap, colorArr, redrawFn) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = '';
-  labels.forEach((label, i) => {
-    const col = colorArr[i % colorArr.length];
-    const item = document.createElement('div');
-    item.className = 'legend-item' + (hiddenMap[label] ? ' muted' : '');
-    item.innerHTML = `<div class="legend-dot" style="background:${col}"></div>${label}`;
-    item.onclick = () => {
-      hiddenMap[label] = !hiddenMap[label];
-      item.classList.toggle('muted', hiddenMap[label]);
-      redrawFn();
-    };
-    el.appendChild(item);
-  });
-}
-
-function drawHorseChart() {
-  drawYearChart('horseYearChart', window.TOP_HORSES||[], window.HORSE_YWINS||{}, horseHidden, 'horseChartTip', CHART_COLORS);
-}
-function drawJockeyChart() {
-  drawYearChart('jockeyYearChart', window.TOP_JOCKEYS||[], window.JOCKEY_YWINS||{}, jockeyHidden, 'jockeyChartTip', CHART_COLORS);
-}
-
-
-// Tab switcher
-function switchTab(id, btn) {
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  btn.classList.add('active');
-  if (id === 'chart-h') setTimeout(drawHorseChart, 30);
-  if (id === 'chart-j') setTimeout(drawJockeyChart, 30);
-}
-
-window.addEventListener('resize', () => {
-  const activeTab = document.querySelector('.tab-pane.active');
-  if (activeTab && activeTab.id === 'tab-chart-h') drawHorseChart();
-  if (activeTab && activeTab.id === 'tab-chart-j') drawJockeyChart();
-});
-
-// Venue bars
-// venue bars rendered by loadDashboard()
-
-// Results table
-function oddsClass(o) {
-  if (!o || o === 0) return 'odds-mid';
-  if (o <= 3) return 'odds-low';
-  if (o >= 20) return 'odds-high';
-  return 'odds-mid';
-}
-function oddsLabel(o) {
-  if (!o || o === 0) return 'N/A';
-  return o + 'x';
-}
-
-// Pre-render all rows once, then show/hide with CSS
-function buildTable() {
-  const body = document.getElementById('resultsBody');
-  const frag = document.createDocumentFragment();
-  (window.DATA?.recent_g1||[]).forEach((d, i) => {
-    const tr = document.createElement('tr');
-    tr.dataset.i       = i;
-    tr.dataset.surface = (d.surface || '').toLowerCase();
-    tr.dataset.dist    = d.distance_m;
-    // Pre-build search string once - avoids repeated string ops on filter
-    tr.dataset.search  = [d.race_name, d.horse_name, d.jockey_name, d.trainer_name, d.venue]
-                           .join(' ').toLowerCase();
-    const oc = oddsClass(d.win_odds);
-    tr.innerHTML = `
-      <td><span style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted)">${d.race_date}</span></td>
-      <td><span class="g1-tag">G1</span> <a href="https://db.netkeiba.com/race/${d.race_id}/" target="_blank" class="race-link">${d.race_name}</a></td>
-      <td><span class="winner-horse">${d.horse_name}</span></td>
-      <td><span class="jockey-name">${d.jockey_name}</span></td>
-      <td style="color:var(--muted);font-size:0.75rem">${d.trainer_name}</td>
-      <td><span class="venue-badge">${d.venue}</span></td>
-      <td><span class="dist-val">${d.distance_m}m</span></td>
-      <td><span class="odds-val ${oc}">${oddsLabel(d.win_odds)}</span></td>`;
-    frag.appendChild(tr);
-  });
-  body.appendChild(frag);
-}
-
-// Debounce - waits for user to stop typing before filtering
-function debounce(fn, ms) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-}
-
-function filterTable() {
-  const q = document.getElementById('searchInput').value.toLowerCase().trim();
-  const f = activeFilter;
-  const rows = document.getElementById('resultsBody').rows;
-  let visible = 0;
-
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const dist = +r.dataset.dist;
-    const surf = r.dataset.surface;
-
-    let show = true;
-    if (f === 'turf'   && surf !== 'turf')                          show = false;
-    if (f === 'dirt'   && surf !== 'dirt')                          show = false;
-    if (f === 'sprint' && dist > 1400)                              show = false;
-    if (f === 'mile'   && (dist <= 1400 || dist > 1800))            show = false;
-    if (f === 'inter'  && (dist <= 1800 || dist > 2100))            show = false;
-    if (f === 'long'   && dist <= 2100)                             show = false;
-    if (show && q && !r.dataset.search.includes(q))                 show = false;
-
-    r.style.display = show ? '' : 'none';
-    if (show) visible++;
-  }
-
-  document.getElementById('countLabel').textContent = visible + ' results';
-  document.getElementById('noResults').style.display = visible ? 'none' : 'block';
-}
-
-const filterTableDebounced = debounce(filterTable, 80);
-
-function setFilter(f, btn) {
-  activeFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  filterTable();
-}
-
-window.addEventListener("DOMContentLoaded", loadDashboard);
-</script>
-
-
-<div id="loadingOverlay" style="
-  position:fixed;inset:0;background:rgba(10,10,15,0.92);
-  z-index:9999;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:1rem;">
-  <div style="font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:3px;
-               background:linear-gradient(135deg,#fff 40%,var(--accent));
-               -webkit-background-clip:text;-webkit-text-fill-color:transparent">
-    JRA GRADED RACES
-  </div>
-  <div style="width:200px;height:2px;background:var(--surface2);border-radius:1px;overflow:hidden">
-    <div style="height:100%;background:var(--accent);animation:loadBar 1.5s ease-in-out infinite;
-                border-radius:1px"></div>
-  </div>
-  <div id="loadingMsg" style="font-family:'DM Mono',monospace;font-size:0.7rem;
-                               color:var(--muted);letter-spacing:1px">Connecting...</div>
-</div>
-<style>
-@keyframes loadBar {{
-  0%   {{ width:0%;margin-left:0 }}
-  50%  {{ width:60%;margin-left:20% }}
-  100% {{ width:0%;margin-left:100% }}
-}}
-</style>
-
-<button class="settings-toggle" onclick="toggleSettings()" title="Customize">⚙️</button>
-
-<div class="settings-panel" id="settingsPanel">
-  <div class="settings-title">⚙ Customize</div>
-
-  <div class="settings-group">
-    <div class="settings-label">Theme</div>
-    <div class="theme-toggle-row">
-      <span style="font-size:0.8rem;color:var(--text)">☀️ Light mode</span>
-      <div class="toggle-switch" id="themeToggle" onclick="toggleTheme()">
-        <div class="toggle-knob"></div>
-      </div>
-    </div>
-  </div>
-
-  <hr class="settings-divider">
-
-  <div class="settings-group">
-    <div class="settings-label">Accent Color</div>
-    <div class="color-wheel-wrap">
-      <input type="color" class="color-wheel" id="colorWheel" value="#e8335a" oninput="updateAccent(this.value)">
-      <input type="text" class="color-hex" id="colorHex" value="#e8335a" onchange="updateAccentFromHex(this.value)" maxlength="7">
-    </div>
-    <div class="color-presets">
-      <div class="preset-dot" style="background:#e8335a" onclick="updateAccent('#e8335a')" title="Crimson"></div>
-      <div class="preset-dot" style="background:#d4af37" onclick="updateAccent('#d4af37')" title="Gold"></div>
-      <div class="preset-dot" style="background:#00c9a7" onclick="updateAccent('#00c9a7')" title="Teal"></div>
-      <div class="preset-dot" style="background:#7c5cbf" onclick="updateAccent('#7c5cbf')" title="Purple"></div>
-      <div class="preset-dot" style="background:#3a7bd5" onclick="updateAccent('#3a7bd5')" title="Blue"></div>
-      <div class="preset-dot" style="background:#ff6b35" onclick="updateAccent('#ff6b35')" title="Orange"></div>
-    </div>
-  </div>
-
-  <hr class="settings-divider">
-
-  <div class="settings-group" style="margin-bottom:0">
-    <div class="settings-label">Font</div>
-    <div class="font-pills">
-      <button class="font-pill active" onclick="setFont('dm','DM Sans')" id="font-dm">
-        <span class="font-pill-name" style="font-family:'DM Sans'">DM Sans</span>
-        <span class="font-pill-sample" style="font-family:'DM Sans'">Clean, Modern, Default</span>
-      </button>
-      <button class="font-pill" onclick="setFont('grotesk','Space Grotesk')" id="font-grotesk">
-        <span class="font-pill-name" style="font-family:'Space Grotesk'">Space Grotesk</span>
-        <span class="font-pill-sample" style="font-family:'Space Grotesk'">Geometric, Technical</span>
-      </button>
-      <button class="font-pill" onclick="setFont('playfair','Playfair Display')" id="font-playfair">
-        <span class="font-pill-name" style="font-family:'Playfair Display'">Playfair Display</span>
-        <span class="font-pill-sample" style="font-family:'Playfair Display'">Elegant, Editorial</span>
-      </button>
-      <button class="font-pill" onclick="setFont('syne','Syne')" id="font-syne">
-        <span class="font-pill-name" style="font-family:'Syne'">Syne</span>
-        <span class="font-pill-sample" style="font-family:'Syne'">Bold, Expressive</span>
-      </button>
-      <button class="font-pill" onclick="setFont('ibm','IBM Plex Sans')" id="font-ibm">
-        <span class="font-pill-name" style="font-family:'IBM Plex Sans'">IBM Plex Sans</span>
-        <span class="font-pill-sample" style="font-family:'IBM Plex Sans'">Sharp, Technical</span>
-      </button>
-    </div>
-  </div>
-</div>
-
-<script>
-// Settings panel
-function toggleSettings() {
-  document.getElementById('settingsPanel').classList.toggle('open');
-}
-document.addEventListener('click', function(e) {
-  const panel = document.getElementById('settingsPanel');
-  if (!panel.contains(e.target) && !e.target.classList.contains('settings-toggle')) {
-    panel.classList.remove('open');
-  }
-});
-
-// Theme toggle
-let isLight = false;
-function toggleTheme() {
-  isLight = !isLight;
-  document.body.classList.toggle('light', isLight);
-  document.getElementById('themeToggle').classList.toggle('on', isLight);
-  localStorage.setItem('jra-theme', isLight ? 'light' : 'dark');
-}
-
-// Accent color
-function updateAccent(hex) {
-  document.documentElement.style.setProperty('--accent', hex);
-  document.getElementById('colorWheel').value = hex;
-  document.getElementById('colorHex').value = hex;
-  // Update bar fills
-  document.querySelectorAll('.bar-fill').forEach(el => {
-    el.style.background = `linear-gradient(90deg, ${hex}, ${lighten(hex, 30)})`;
-  });
-  document.querySelectorAll('.year-bar').forEach(el => {
-    el.style.background = `linear-gradient(180deg, ${hex}, ${darken(hex, 30)})`;
-  });
-  localStorage.setItem('jra-accent', hex);
-}
-function updateAccentFromHex(val) {
-  if (/^#[0-9a-fA-F]{6}$/.test(val)) updateAccent(val);
-}
-function lighten(hex, pct) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.min(255, (n >> 16) + pct);
-  const g = Math.min(255, ((n >> 8) & 0xff) + pct);
-  const b = Math.min(255, (n & 0xff) + pct);
-  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
-}
-function darken(hex, pct) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.max(0, (n >> 16) - pct);
-  const g = Math.max(0, ((n >> 8) & 0xff) - pct);
-  const b = Math.max(0, (n & 0xff) - pct);
-  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
-}
-
-// Font selector
-const FONTS = {
-  'dm':       'DM Sans',
-  'grotesk':  'Space Grotesk',
-  'playfair': 'Playfair Display',
-  'syne':     'Syne',
-  'ibm':      'IBM Plex Sans',
-};
-function setFont(key, family) {
-  document.body.style.fontFamily = `'${family}', sans-serif`;
-  document.querySelectorAll('.font-pill').forEach(el => el.classList.remove('active'));
-  document.getElementById('font-' + key).classList.add('active');
-  localStorage.setItem('jra-font', key);
-}
-
-// Restore saved preferences
-(function() {
-  const savedAccent = localStorage.getItem('jra-accent');
-  if (savedAccent) updateAccent(savedAccent);
-  const savedTheme = localStorage.getItem('jra-theme');
-  if (savedTheme === 'light') toggleTheme();
-  const savedFont = localStorage.getItem('jra-font');
-  if (savedFont && FONTS[savedFont]) setFont(savedFont, FONTS[savedFont]);
-})();
-</script>
-
-</body>
-</html>
