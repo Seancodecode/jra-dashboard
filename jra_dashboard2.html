@@ -1280,8 +1280,8 @@ async function loadDashboard() {
     window.HORSE_YWINS  = horseYearWins;
     window.JOCKEY_YWINS = jockeyYearWins;
 
-    buildLegend('horseLegend', top5Horses, horseHidden, CHART_COLORS, drawHorseChart);
-    buildLegend('jockeyLegend', top5Jockeys, jockeyHidden, CHART_COLORS, drawJockeyChart);
+    buildLegend('horseLegend', window.TOP_HORSES||[], horseHidden, CHART_COLORS, drawHorseChart);
+    buildLegend('jockeyLegend', window.TOP_JOCKEYS||[], jockeyHidden, CHART_COLORS, drawJockeyChart);
 
     // Build G1 table
     window.DATA = { recent_g1: g1Table };
@@ -1541,7 +1541,7 @@ function drawYearChart(canvasId, labels, dataMap, hiddenMap, tooltipId, colorArr
   ctx.font = '9px DM Mono, monospace';
   ctx.textAlign = 'center';
   (window.CHART_YEARS||[]).forEach((y, i) => {
-    if (y % 5 === 0 || y === 2021) ctx.fillText(y === 2021 ? '21*' : y, xPos(i), pad.top+ch+16);
+    if (y % 5 === 0) ctx.fillText(y === 2021 ? '21*' : y, xPos(i), pad.top+ch+16);
   });
 
   // Lines
@@ -1599,10 +1599,10 @@ function buildLegend(containerId, labels, hiddenMap, colorArr, redrawFn) {
 }
 
 function drawHorseChart() {
-  drawYearChart('horseYearChart', TOP_HORSES, HORSE_YWINS, horseHidden, 'horseChartTip', CHART_COLORS);
+  drawYearChart('horseYearChart', window.TOP_HORSES||[], window.HORSE_YWINS||{}, horseHidden, 'horseChartTip', CHART_COLORS);
 }
 function drawJockeyChart() {
-  drawYearChart('jockeyYearChart', TOP_JOCKEYS, JOCKEY_YWINS, jockeyHidden, 'jockeyChartTip', CHART_COLORS);
+  drawYearChart('jockeyYearChart', window.TOP_JOCKEYS||[], window.JOCKEY_YWINS||{}, jockeyHidden, 'jockeyChartTip', CHART_COLORS);
 }
 
 
@@ -1650,6 +1650,7 @@ function buildTable() {
     tr.dataset.search  = [d.race_name, d.horse_name, d.jockey_name, d.trainer_name, d.venue]
                            .join(' ').toLowerCase();
     const oc = oddsClass(d.win_odds);
+      const winOdds = d.win_odds;
     tr.innerHTML = `
       <td><span style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted)">${d.race_date}</span></td>
       <td><span class="g1-tag">G1</span> <a href="https://db.netkeiba.com/race/${d.race_id}/" target="_blank" class="race-link">${d.race_name}</a></td>
@@ -1658,7 +1659,7 @@ function buildTable() {
       <td style="color:var(--muted);font-size:0.75rem">${d.trainer_name}</td>
       <td><span class="venue-badge">${d.venue}</span></td>
       <td><span class="dist-val">${d.distance_m}m</span></td>
-      <td><span class="odds-val ${oc}">${d.win_odds}x</span></td>`;
+      <td><span class="odds-val ${oc}">${oddsLabel(d.win_odds)}</span></td>`;
     frag.appendChild(tr);
   });
   body.appendChild(frag);
