@@ -134,13 +134,28 @@
   </div>
 
   <div class="ctrl-box">
+    <div class="ctrl-row" style="border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:5px;margin-bottom:8px;">
+      <span class="ctrl-label">Animations</span>
+    </div>
+    
     <div class="ctrl-row">
-      <span class="ctrl-label">Wave Anim</span>
-      <button class="btn" id="waveBtn" onclick="toggleWave()"
-              style="padding:2px 6px;font-size:8px;flex-shrink:0;">OFF</button>
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Pulse Nodes</span>
+      <button class="btn" id="waveBtn" onclick="toggleWave()" style="padding:2px 6px;font-size:8px;">OFF</button>
     </div>
     <input type="range" id="waveSpeed" min="0.2" max="3" step="0.1" value="1"
-           oninput="updateWaveSpeed(this.value)" style="opacity:0.5;">
+           oninput="waveSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Wobble Links</span>
+      <button class="btn" id="wobbleBtn" onclick="toggleWobble()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="wobbleSpeed" min="0.5" max="5" step="0.1" value="2"
+           oninput="wobbleSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Float & Bounce</span>
+      <button class="btn" id="floatBtn" onclick="toggleFloat()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
   </div>
 </div>
 
@@ -172,9 +187,33 @@ let root = null;
 let spreadFactor = 1;
 let maxDepth = 0;
 
-let waveTimer = null;
-let isWaveOn  = false;
-let waveSpeed = 1;
+// Master animation variables
+let globalTime  = 0;
+let isWaveOn    = false;
+let waveSpeed   = 1;
+let isWobbleOn  = false;
+let wobbleSpeed = 2;
+let isFloatOn   = false;
+let floatSim    = null;
+
+// Global render loop to handle physics and sine waves
+d3.timer(elapsed => {
+  globalTime = elapsed;
+  
+  if (isWaveOn) {
+    NG.selectAll('g.node-inner').attr('transform', d => {
+      const phase = d.depth * 1.5;
+      const scale = 1 + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
+      return `scale(${scale})`;
+    });
+  }
+
+  // If float is running, it triggers redrawLinksFast inside its tick event.
+  // We only need to manually call it here if wobble is on but float is off.
+  if (isWobbleOn && !isFloatOn) {
+    redrawLinksFast();
+  }
+});
 
 function onLevelSlide(val) {
   const v = parseInt(val);
@@ -213,27 +252,97 @@ function toggleWave() {
     btn.style.color = '#00c9a7';
     btn.style.borderColor = '#00c9a7';
     slider.style.opacity = '1';
-    if (!waveTimer) startWave();
   } else {
     btn.textContent = 'OFF';
     btn.style.color = '';
     btn.style.borderColor = '';
     slider.style.opacity = '0.5';
-    if (waveTimer) { waveTimer.stop(); waveTimer = null; }
     NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
   }
 }
 
-function updateWaveSpeed(val) { waveSpeed = parseFloat(val); }
+function toggleWobble() {
+  isWobbleOn = !isWobbleOn;
+  const btn    = document.getElementById('wobbleBtn');
+  const slider = document.getElementById('wobbleSpeed');
+  if (isWobbleOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00c9a7';
+    btn.style.borderColor = '#00c9a7';
+    slider.style.opacity = '1';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
+    redrawLinksFast();
+  }
+}
 
-function startWave() {
-  waveTimer = d3.timer(elapsed => {
-    NG.selectAll('g.node-inner').attr('transform', d => {
-      const phase = d.depth * 1.5;
-      const scale = 1 + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
-      return `scale(${scale})`;
+function toggleFloat() {
+  isFloatOn = !isFloatOn;
+  const btn = document.getElementById('floatBtn');
+  
+  if (isFloatOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00c9a7';
+    btn.style.borderColor = '#00c9a7';
+    
+    const nodes = root.descendants();
+    nodes.forEach(d => {
+      if (isNaN(d.x) || d.x === undefined) { d.x = d.cartX; d.y = d.cartY; }
+      d.vx = 0; d.vy = 0;
     });
-  });
+
+    floatSim = d3.forceSimulation(nodes)
+      .alphaDecay(0)
+      .velocityDecay(0.15)
+      .force('collide', d3.forceCollide().radius(d => nodeR(d) + 5).iterations(2))
+      .force('x', d3.forceX(d => d.cartX0).strength(0.03))
+      .force('y', d3.forceY(d => d.cartY0).strength(0.03))
+      .on('tick', () => {
+         nodes.forEach(d => {
+           if (!d.data.ox) {
+             // Inject a little Brownian motion for the floaty aesthetic
+             d.vx += (Math.random() - 0.5) * 0.4;
+             d.vy += (Math.random() - 0.5) * 0.4;
+             d.cartX = d.x;
+             d.cartY = d.y;
+           } else {
+             // Lock to mouse if dragged
+             d.x = d.data.ox;
+             d.y = d.data.oy;
+             d.cartX = d.data.ox;
+             d.cartY = d.data.oy;
+           }
+         });
+         NG.selectAll('g.nd').attr('transform', d => `translate(${d.cartX},${d.cartY})`);
+         redrawLinksFast();
+      });
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    
+    if (floatSim) {
+       floatSim.stop();
+       floatSim = null;
+    }
+    
+    const nodes = root.descendants();
+    nodes.forEach(d => {
+       d.cartX = d.data.ox || d.cartX0;
+       d.cartY = d.data.oy || d.cartY0;
+    });
+    
+    NG.selectAll('g.nd')
+      .transition().duration(600)
+      .attr('transform', d => `translate(${d.cartX},${d.cartY})`);
+      
+    d3.select(g.node()).transition().duration(600).tween('links', () => {
+      return () => { if (!isFloatOn) redrawLinksFast(); };
+    });
+  }
 }
 
 let rankOpen = false;
@@ -415,7 +524,14 @@ function linkPath(s, t) {
   const dx  = t.cartX - s.cartX;
   const dy  = t.cartY - s.cartY;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
-  const bow = len * 0.08;
+  let bow = len * 0.08;
+
+  if (isWobbleOn) {
+    const phase = s.depth;
+    const wobble = Math.sin(globalTime * 0.005 * wobbleSpeed - phase) * 20;
+    bow += wobble;
+  }
+
   return `M${s.cartX},${s.cartY}Q${mx - dy/len*bow},${my + dx/len*bow} ${t.cartX},${t.cartY}`;
 }
 
@@ -448,16 +564,31 @@ function update(source) {
 
   const drag = d3.drag()
     .subject((e, d) => ({ x: d.cartX, y: d.cartY }))
-    .on('start', (e, d) => { isDragging = false; e.sourceEvent.stopPropagation(); })
+    .on('start', (e, d) => { 
+      isDragging = false; 
+      e.sourceEvent.stopPropagation(); 
+      if (isFloatOn && floatSim) floatSim.alphaTarget(0.3).restart();
+    })
     .on('drag',  (e, d) => {
       isDragging = true;
       d.data.ox = e.x; d.data.oy = e.y;
       d.cartX = e.x;   d.cartY = e.y;
-      d3.select(NG.selectAll('g.nd').filter(n => n.id === d.id).node())
-        .attr('transform', `translate(${d.cartX},${d.cartY})`);
-      redrawLinksFast();
+      
+      if (isFloatOn) {
+        d.fx = e.x;
+        d.fy = e.y;
+      } else {
+        d3.select(NG.selectAll('g.nd').filter(n => n.id === d.id).node())
+          .attr('transform', `translate(${d.cartX},${d.cartY})`);
+        redrawLinksFast();
+      }
     })
     .on('end', (e, d) => {
+      if (isFloatOn) {
+        d.fx = null;
+        d.fy = null;
+        if (floatSim) floatSim.alphaTarget(0);
+      }
       if (!isDragging && d._children) {
         d.children = d.children ? null : d._children;
         d.data.ox = null; d.data.oy = null;
@@ -533,7 +664,7 @@ function update(source) {
     .attr('stroke-width', d => d.source.id === 'root' ? 2 : 1.3)
     .attr('stroke-opacity', 0)
     .attr('d', d => {
-      const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy };
+      const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy, depth: 0 };
       return linkPath(o, o);
     })
     .merge(lk)
@@ -544,11 +675,24 @@ function update(source) {
   lk.exit().transition().duration(400)
     .attr('stroke-opacity', 0)
     .attr('d', d => {
-      const o = { cartX: source.cartX, cartY: source.cartY };
+      const o = { cartX: source.cartX, cartY: source.cartY, depth: 0 };
       return linkPath(o, o);
     }).remove();
 
   nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
+
+  // Update physics engine if a node was clicked open while floating is turned on
+  if (isFloatOn && floatSim) {
+    const currentNodes = root.descendants();
+    floatSim.nodes(currentNodes);
+    currentNodes.forEach(d => {
+      if (d.x === undefined || isNaN(d.x)) {
+         d.x = source.cartX0 || cx; 
+         d.y = source.cartY0 || cy;
+      }
+    });
+    floatSim.alpha(1).restart();
+  }
 }
 
 function traverseAll(node, callback) {
