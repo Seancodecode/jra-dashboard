@@ -247,6 +247,7 @@ let floatSim      = null;
 let isSpinOn      = false;
 let spinSpeed     = 1;
 let mapAngle      = 0;
+let ripples       = [];
 
 let audioCtx = null;
 let analyser = null;
@@ -313,6 +314,10 @@ function stopAudio() {
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
   NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
   
+  // Wipe all ripples instantly
+  ripples = [];
+  NG.selectAll('.ripple').remove();
+
   applyStaticGlow(glowMode === 'audio' ? 0 : manualGlowVal);
   d3.select('#glitchDisplacement').attr('scale', 0);
 }
@@ -354,6 +359,10 @@ function toggleGlowMode() {
     NG.selectAll('.aura').attr('filter', null);
     d3.select('#glitchDisplacement').attr('scale', 0);
     applyStaticGlow(manualGlowVal);
+    
+    // Wipe ripples if disabling audio mode
+    ripples = [];
+    NG.selectAll('.ripple').remove();
   }
 }
 
@@ -383,6 +392,25 @@ function applyStaticGlow(factor) {
   LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
 }
 
+// Generates the geometry for a 7-sided star (heptagram)
+function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
+  let rot = Math.PI / 2 * 3;
+  let step = Math.PI / spikes;
+  let path = '';
+  for(let i = 0; i < spikes; i++) {
+    let x = cx + Math.cos(rot) * outerRadius;
+    let y = cy + Math.sin(rot) * outerRadius;
+    path += (i === 0 ? 'M' : 'L') + x + ',' + y;
+    rot += step;
+    x = cx + Math.cos(rot) * innerRadius;
+    y = cy + Math.sin(rot) * innerRadius;
+    path += 'L' + x + ',' + y;
+    rot += step;
+  }
+  path += 'Z';
+  return path;
+}
+
 d3.timer(elapsed => {
   globalTime = elapsed;
   
@@ -405,19 +433,55 @@ d3.timer(elapsed => {
       
       LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
 
-      // Regenerate the seed to create true flowing TV static
+      // Force native fractal noise regeneration 
       d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
 
-      // Drive the displacement map scale using the audio energy
-      // 0 energy = perfectly round aura. High energy = violently shredded static aura.
+      // Audio-driven displacement Map scaling
       let glitchIntensity = smoothedEnergy * 100 * manualGlowVal;
       d3.select('#glitchDisplacement').attr('scale', glitchIntensity);
+
+      // Droplet Emitter Logic (Only in Audio Mode)
+      if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) {
+        ripples.push({
+           id: Math.random().toString(),
+           r: 34, // Root node radius
+           op: Math.min(1, smoothedEnergy * 1.5),
+           thickness: 2 + smoothedEnergy * 5
+        });
+      }
     }
   } else {
     if (glowMode === 'audio') {
         smoothedEnergy = 0;
         d3.select('#glitchDisplacement').attr('scale', 0);
     }
+  }
+
+  // Update Droplet Physics
+  for (let i = ripples.length - 1; i >= 0; i--) {
+      ripples[i].r += 1 + smoothedEnergy * 3;
+      ripples[i].op -= 0.01; 
+      if (ripples[i].op <= 0) {
+          ripples.splice(i, 1);
+      }
+  }
+
+  // Render Droplets
+  let rootNd = NG.selectAll('g.nd').filter(d => d.id === 'root');
+  if (!rootNd.empty()) {
+      let rpl = rootNd.select('.ripple-group').selectAll('circle.ripple').data(ripples, d => d.id);
+      
+      rpl.enter().append('circle')
+         .attr('class', 'ripple')
+         .attr('fill', 'none')
+         .attr('stroke', '#ffd700')
+         .merge(rpl)
+         .attr('r', d => d.r)
+         .attr('stroke-width', d => d.thickness * d.op)
+         .attr('stroke-opacity', d => d.op)
+         .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null); // Ripples distort in the static field too
+         
+      rpl.exit().remove();
   }
 
   NG.selectAll('g.node-inner').each(function(d) {
@@ -715,12 +779,20 @@ function buildRankPanel(nodesMap) {
 
 function pulseNode(id) {
   const sel = NG.selectAll('g.nd').filter(d => d.id === String(id)).select('.main-node');
-  sel
-    .transition().duration(180).attr('r', d => nodeR(d) * 2.8)
-    .transition().duration(180).attr('r', d => nodeR(d) * 1.6)
-    .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
-    .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
-    .transition().duration(300).attr('r', d => nodeR(d));
+  
+  if (id === 'root') {
+    sel.transition().duration(180).attr('transform', 'scale(1.8)')
+       .transition().duration(180).attr('transform', 'scale(1.2)')
+       .transition().duration(180).attr('transform', 'scale(1.5)')
+       .transition().duration(180).attr('transform', 'scale(1.1)')
+       .transition().duration(300).attr('transform', 'scale(1)');
+  } else {
+    sel.transition().duration(180).attr('r', d => nodeR(d) * 2.8)
+       .transition().duration(180).attr('r', d => nodeR(d) * 1.6)
+       .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
+       .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
+       .transition().duration(300).attr('r', d => nodeR(d));
+  }
 }
 
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
@@ -762,7 +834,7 @@ const mapLayer = g.append('g').attr('id', 'mapLayer');
 
 const defs = svg.append('defs');
 
-// Pure Radial Gradients for the Aura
+// Pure Radial Gradients for the True Light Aura
 const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
 allColors.forEach(c => {
   const grad = defs.append('radialGradient')
@@ -956,19 +1028,26 @@ function update(source) {
     .call(drag)
     .on('mouseover', (e, d) => {
       showTip(e, d);
-      d3.select(e.currentTarget).select('.main-node')
-        .transition().duration(200).attr('r', nodeR(d) * 1.3);
+      // Hover effects for the nodes
+      if (d.id === 'root') {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('transform', 'scale(1.2)');
+      } else {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('r', nodeR(d) * 1.3);
+      }
     })
     .on('mouseout', (e, d) => {
       hideTip();
-      d3.select(e.currentTarget).select('.main-node')
-        .transition().duration(250).attr('r', nodeR(d));
+      if (d.id === 'root') {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(250).attr('transform', 'scale(1)');
+      } else {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(250).attr('r', nodeR(d));
+      }
     })
     .attr('opacity', 0);
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  // The new decoupled, pure math Radial Gradient Aura
+  // Pure Math Radial Gradient Aura for all nodes
   inner.append('circle')
     .attr('class', 'aura')
     .attr('r', d => nodeR(d) * 4.5) 
@@ -977,17 +1056,36 @@ function update(source) {
     .attr('opacity', 0)
     .style('pointer-events', 'none');
 
-  inner.append('circle')
+  // The Droplet Ripple Layer (Injected only for the central root node)
+  inner.filter(d => d.id === 'root')
+    .append('g')
+    .attr('class', 'ripple-group')
+    .style('pointer-events', 'none');
+
+  // Generate a mathematically perfect 7-Sided Star for the central node
+  inner.filter(d => d.id === 'root')
+    .append('path')
+    .attr('class', 'main-node')
+    .attr('d', d => getStarPath(0, 0, 7, nodeR(d) * 1.4, nodeR(d) * 0.6))
+    .attr('fill', d => bcolor(d))
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5);
+
+  // Keep standard circular rendering for all other descendants
+  inner.filter(d => d.id !== 'root')
+    .append('circle')
     .attr('class', 'main-node')
     .attr('r', d => nodeR(d))
-    .attr('fill', d => (d.data.g1 > 0 || d.id === 'root') ? bcolor(d) : '#1a1a26')
+    .attr('fill', d => (d.data.g1 > 0) ? bcolor(d) : '#1a1a26')
     .attr('stroke', d => bcolor(d));
 
-  inner.append('text').text(d => d.data.name)
+  // Regular Names for Descendant Nodes
+  inner.filter(d => d.id !== 'root')
+    .append('text').text(d => d.data.name)
     .attr('dy', d => nodeR(d) + 16).attr('text-anchor', 'middle')
-    .attr('font-size', d => d.id === 'root' ? '15px' : (d.data.g1 >= 5 ? '13px' : '11px'))
-    .attr('font-weight', d => (d.id === 'root' || d.data.g1 >= 5) ? '800' : '600')
-    .attr('fill', d => d.id === 'root' ? '#fff' : (d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)'))
+    .attr('font-size', d => (d.data.g1 >= 5 ? '13px' : '11px'))
+    .attr('font-weight', d => (d.data.g1 >= 5 ? '800' : '600'))
+    .attr('fill', d => (d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)'))
     .attr('pointer-events', 'none')
     .style('text-shadow', d => d.data.g1 > 0 ? `0 0 10px ${bcolor(d)}` : 'none');
 
@@ -999,7 +1097,7 @@ function update(source) {
     .attr('pointer-events', 'none')
     .style('text-shadow', d => `0 0 8px ${bcolor(d)}, 0 0 15px ${bcolor(d)}`);
 
-  inner.filter(d => d._children).append('text')
+  inner.filter(d => d._children && d.id !== 'root').append('text')
     .attr('class', 'pm')
     .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
     .attr('font-size', '14px').attr('font-weight', 'bold')
