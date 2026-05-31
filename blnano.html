@@ -3,7 +3,6 @@
 <head>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<meta name="referrer" content="no-referrer" />
 <style>
   body{margin:0;background:#050508;overflow:hidden;font-family:system-ui,sans-serif;}
   #cv{width:100%;height:100vh;}
@@ -935,10 +934,14 @@ function showTip(e, d){
   let imgHtml = '';
 
   if (d.id !== 'root') {
+    // Route the URL through a proxy to smash through Netkeiba's hotlink protection
+    const targetUrl = `https://db.netkeiba.com/show_photo.php?horse_id=${d.id}&tn=yes`;
+    const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(targetUrl)}`;
+
     imgHtml = `
       <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; display:flex; justify-content:center; background:rgba(0,0,0,0.5); box-shadow:inset 0 0 10px rgba(0,0,0,0.8);">
-        <img src="https://cdn.netkeiba.com/img.db/horse/${d.id}/${d.id}_1.jpg"
-             onerror="if(!this.dataset.retried){ this.dataset.retried=true; this.src='https://db.netkeiba.com/show_photo.php?horse_id=${d.id}&tn=yes'; } else { this.parentElement.style.display='none'; }"
+        <img src="${proxyUrl}"
+             onerror="this.parentElement.style.display='none';"
              style="max-width:200px; max-height:140px; width:auto; height:auto; object-fit:contain; display:block;" />
       </div>
     `;
@@ -961,7 +964,6 @@ function showTip(e, d){
   tipEl.style.opacity = '1';
   tipEl.style.left = (e.clientX + 15) + 'px';
   
-  // Flip the tooltip upwards if we are too close to the bottom edge
   if (e.clientY > window.innerHeight - 250) {
     tipEl.style.top = (e.clientY - tipEl.offsetHeight - 15) + 'px';
   } else {
