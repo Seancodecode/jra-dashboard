@@ -205,35 +205,52 @@
       <button class="btn" id="floatBtn" onclick="toggleFloat()" style="padding:2px 6px;font-size:8px;">OFF</button>
     </div>
 
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Cam Shake</span>
+      <button class="btn" id="shakeBtn" onclick="toggleShake()" style="padding:2px 6px;font-size:8px;color:#cc00ff;border-color:#cc00ff;">ON</button>
+    </div>
+
     <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Galaxy</span>
       <button class="btn" id="threeDBtn" onclick="toggle3D()" style="padding:2px 6px;font-size:8px;">OFF</button>
     </div>
 
     <div id="threeDControls" style="display:none;">
-      <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
-        <span class="ctrl-val" id="tiltVal">32°</span>
-      </div>
-      <input type="range" id="tiltSlider" min="-1.4" max="1.4" step="0.01" value="0.55"
-             oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
 
       <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Spin</span>
-        <span class="ctrl-val" id="spin3dVal">0.6x</span>
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">POV · Stargaze</span>
+        <button class="btn" id="povBtn" onclick="togglePOV()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
-      <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0.6"
-             oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
+
+      <!-- Orbit-only controls -->
+      <div id="orbitControls">
+        <div class="ctrl-row">
+          <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
+          <span class="ctrl-val" id="tiltVal">32°</span>
+        </div>
+        <input type="range" id="tiltSlider" min="-1.4" max="1.4" step="0.01" value="0.55"
+               oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
+
+        <div class="ctrl-row">
+          <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Spin</span>
+          <span class="ctrl-val" id="spin3dVal">0.0x</span>
+        </div>
+        <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0"
+               oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
+      </div>
 
       <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Bulge</span>
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="bulgeLabel">Bulge</span>
         <span class="ctrl-val" id="bulge3dVal">140</span>
       </div>
       <input type="range" id="bulge3dSlider" min="0" max="400" step="5" value="140"
              oninput="setBulge3D(this.value)" style="opacity:0.8;margin-bottom:4px;">
 
-      <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;">
+      <div id="orbitHint" style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;">
         DRAG TO ORBIT · SCROLL TO ZOOM
+      </div>
+      <div id="povHint" style="display:none;font-size:8px;color:#00ffcc;font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;line-height:1.7;">
+        W/A/S/D OR DRAG TO LOOK<br>BULGE = ELEVATION · SCROLL = ZOOM
       </div>
     </div>
   </div>
@@ -287,11 +304,23 @@ let ripples       = [];
 let is3DOn        = false;
 let yaw3d         = 0;
 let pitch3d       = 0.55;
-let spin3dSpeed   = 0.6;
+let spin3dSpeed   = 0;
 let bulge3d       = 140;
 let focal3d       = 820;
 let orbit3d       = false;
 let lastPX        = 0, lastPY = 0;
+
+// POV / stargaze (first-person from the center) state
+let povMode       = false;
+let lookYaw       = 0;
+let lookPitch     = 0.7;     // start tilted up toward the "sky"
+const keys        = {};      // WASD / arrow keys currently held
+
+// Audio-reactive camera shake state (applies to both 2D and 3D)
+let isShakeOn     = true;
+let shakeEnergy   = 0;
+let shakeX        = 0, shakeY = 0, shakeR = 0;
+const SHAKE_MAX   = 20;
 
 let audioCtx = null;
 let analyser = null;
@@ -523,7 +552,23 @@ d3.timer(elapsed => {
   if (isAudioPlaying && analyser) {
     analyser.getByteFrequencyData(dataArray);
     hasAudioData = true;
-    
+
+    // ── Camera shake energy (independent of glow mode) ──────────────────────
+    if (isShakeOn) {
+      let ssum = 0, slim = Math.floor(dataArray.length * 0.5);
+      for (let i = 0; i < slim; i++) ssum += dataArray[i];
+      let inst = (ssum / slim) / 255;
+      let transient = Math.max(0, inst - shakeEnergy);   // sudden loudness jumps
+      shakeEnergy += (inst - shakeEnergy) * 0.35;
+      let amp = (shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6;
+      shakeX = (Math.random() * 2 - 1) * amp;
+      shakeY = (Math.random() * 2 - 1) * amp;
+      shakeR = (Math.random() * 2 - 1) * amp * 0.12;
+    } else {
+      shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8;
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     if (glowMode === 'audio') {
       let sum = 0;
       let limit = Math.floor(dataArray.length * 0.4);
@@ -551,6 +596,7 @@ d3.timer(elapsed => {
         smoothedEnergy = 0;
         d3.select('#glitchDisplacement').attr('scale', 0);
     }
+    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8;
   }
 
   for (let i = ripples.length - 1; i >= 0; i--) {
@@ -621,9 +667,20 @@ d3.timer(elapsed => {
   }
 
   if (is3DOn) {
-    if (!orbit3d) yaw3d += spin3dSpeed * 0.01;
+    if (povMode) {
+      const ls = 0.035;
+      if (keys['a'] || keys['arrowleft'])  lookYaw   -= ls;
+      if (keys['d'] || keys['arrowright']) lookYaw   += ls;
+      if (keys['w'] || keys['arrowup'])    lookPitch += ls;
+      if (keys['s'] || keys['arrowdown'])  lookPitch -= ls;
+      lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch));
+    } else if (!orbit3d) {
+      yaw3d += spin3dSpeed * 0.01;
+    }
     project3D();
   }
+
+  applyCameraTransform();
 });
 
 function onLevelSlide(val) {
@@ -795,12 +852,13 @@ function toggleFloat() {
 
 let rankOpen = false;
 
-// ── 3D Galaxy mode ────────────────────────────────────────────────────────────
-// Projects each node's existing ring position (angle d.x, radius d.y) into 3D:
-// a tilted, spinning disc with a center bulge. We rotate around Y (yaw) and X
-// (pitch), perspective-project back to cartX/cartY, depth-sort, then scale + dim
-// nodes by depth. Everything downstream (links, tooltips, audio, zoom) already
-// reads cartX/cartY, so it all keeps working.
+// ── 3D modes ──────────────────────────────────────────────────────────────────
+// Two cameras, both reusing each node's existing ring position (angle d.x,
+// radius d.y) and writing back to cartX/cartY so links/tooltips/audio/zoom keep
+// working unchanged:
+//   • Orbit  — a tilted, spinning galaxy disc viewed from outside.
+//   • POV    — stand at the center and look up into a dome of stars (WASD look,
+//              Bulge slider = your elevation).
 function setTilt(v){
   pitch3d = parseFloat(v);
   document.getElementById('tiltVal').textContent = Math.round(pitch3d * 180 / Math.PI) + '\u00b0';
@@ -811,7 +869,48 @@ function setSpin3D(v){
 }
 function setBulge3D(v){
   bulge3d = parseFloat(v);
-  document.getElementById('bulge3dVal').textContent = Math.round(bulge3d);
+  document.getElementById('bulge3dVal').textContent =
+    povMode ? (Math.round(bulge3d) - 200) : Math.round(bulge3d);
+}
+
+function toggleShake(){
+  isShakeOn = !isShakeOn;
+  const btn = document.getElementById('shakeBtn');
+  if (isShakeOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#cc00ff';
+    btn.style.borderColor = '#cc00ff';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    shakeX = shakeY = shakeR = shakeEnergy = 0;
+    applyCameraTransform();
+  }
+}
+
+function togglePOV(){
+  povMode = !povMode;
+  const btn = document.getElementById('povBtn');
+  document.getElementById('orbitControls').style.display = povMode ? 'none' : 'block';
+  document.getElementById('orbitHint').style.display     = povMode ? 'none' : 'block';
+  document.getElementById('povHint').style.display       = povMode ? 'block' : 'none';
+  document.getElementById('bulgeLabel').textContent      = povMode ? 'Elevation' : 'Bulge';
+  setBulge3D(bulge3d);
+
+  if (povMode) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
+    lookYaw = 0; lookPitch = 0.7;     // face up into the sky
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    btn.style.boxShadow = 'none';
+  }
+  if (is3DOn) project3D();
 }
 
 function toggle3D(){
@@ -851,32 +950,32 @@ function toggle3D(){
 function project3D(){
   if (!root) return;
   const nodes = root.descendants();
-
   let maxR = 1;
   nodes.forEach(d => { if (d.y > maxR) maxR = d.y; });
+  if (povMode) projectPOV(nodes, maxR);
+  else         projectOrbit(nodes, maxR);
+}
 
+// External orbit camera: tilted, spinning disc with a center bulge.
+function projectOrbit(nodes, maxR){
   const cyaw = Math.cos(yaw3d),  syaw = Math.sin(yaw3d);
   const cpit = Math.cos(pitch3d), spit = Math.sin(pitch3d);
 
   let zmin = Infinity, zmax = -Infinity;
 
   nodes.forEach(d => {
-    // In-plane (disc-local) coordinates from the existing radial layout.
     const lx = d.y * Math.cos(d.x - Math.PI / 2);
     const ly = d.y * Math.sin(d.x - Math.PI / 2);
-    const lz = (1 - d.y / maxR) * bulge3d; // center pops toward viewer
+    const lz = (1 - d.y / maxR) * bulge3d;
 
-    // Rotate around Y (yaw)
     const x1 =  lx * cyaw + lz * syaw;
     const z1 = -lx * syaw + lz * cyaw;
     const y1 =  ly;
 
-    // Rotate around X (pitch)
     const y2 = y1 * cpit - z1 * spit;
     const z2 = y1 * spit + z1 * cpit;
     const x2 = x1;
 
-    // Perspective projection (larger z = nearer = bigger)
     let denom = focal3d - z2;
     if (denom < 60) denom = 60;
     const persp = focal3d / denom;
@@ -895,9 +994,71 @@ function project3D(){
   NG.selectAll('g.nd')
     .attr('transform', d => `translate(${d.cartX},${d.cartY}) scale(${d._persp})`)
     .attr('opacity',   d => 0.35 + 0.65 * ((d._z3 - zmin) / zrange))
-    .sort((a, b) => a._z3 - b._z3); // farthest first → nearest drawn on top
+    .sort((a, b) => a._z3 - b._z3);
 
   redrawLinksFast();
+}
+
+// First-person POV: stand at the center, stars on a dome overhead.
+// Root (smallest radius) sits at the zenith; descendants fan toward the horizon.
+function projectPOV(nodes, maxR){
+  const DOME_R = 1100;
+  const focal  = 950;
+  const near   = 40;
+  const camY   = (bulge3d - 200) * 1.6; // Bulge slider = your elevation
+
+  const cyaw = Math.cos(lookYaw),   syaw = Math.sin(lookYaw);
+  const cpit = Math.cos(lookPitch), spit = Math.sin(lookPitch);
+
+  nodes.forEach(d => {
+    // Place node on a hemisphere dome.
+    const elev  = (1 - d.y / maxR) * (Math.PI / 2); // zenith → horizon
+    const az    = d.x;
+    const horiz = Math.cos(elev) * DOME_R;
+    const wx = horiz * Math.cos(az);
+    const wz = horiz * Math.sin(az);
+    const wy = Math.sin(elev) * DOME_R;
+
+    // World → camera (camera at center, raised by camY).
+    const relx = wx, rely = wy - camY, relz = wz;
+    const x1 =  cyaw * relx - syaw * relz;
+    const z1 =  syaw * relx + cyaw * relz;
+    const y1 =  rely;
+    const y2 =  cpit * y1 + spit * z1;
+    const z2 = -spit * y1 + cpit * z1;
+    const x2 =  x1;
+
+    if (z2 > near) {
+      const persp = focal / z2;
+      d.cartX  = cx + x2 * persp;
+      d.cartY  = cy - y2 * persp;     // world up → screen up
+      d._z3    = z2;
+      d._persp = Math.min(2.6, Math.max(0.12, persp * (DOME_R / focal)));
+      d._vis3  = true;
+    } else {
+      d._vis3  = false;               // behind the viewer — cull
+      d._z3    = z2;
+      d.cartX  = NaN;                 // invalid transform/path → not rendered
+      d.cartY  = NaN;
+      d._persp = 0;
+    }
+  });
+
+  NG.selectAll('g.nd')
+    .attr('transform', d => d._vis3 ? `translate(${d.cartX},${d.cartY}) scale(${d._persp})` : 'scale(0)')
+    .attr('opacity',   d => d._vis3 ? Math.min(1, 0.45 + (d._persp * 0.4)) : 0)
+    .sort((a, b) => a._z3 - b._z3);
+
+  redrawLinksFast();
+}
+
+// Combined zoom + audio shake applied to the whole scene (covers 2D and 3D).
+function applyCameraTransform(){
+  if (Math.abs(shakeX) + Math.abs(shakeY) + Math.abs(shakeR) > 0.05) {
+    g.attr('transform', `translate(${shakeX},${shakeY}) rotate(${shakeR},${cx},${cy}) ${zoomT}`);
+  } else {
+    g.attr('transform', `${zoomT}`);
+  }
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -1033,12 +1194,12 @@ const zoom = d3.zoom().scaleExtent([0.05, 8])
   .filter(ev => is3DOn ? ev.type === 'wheel' : (!ev.ctrlKey && !ev.button))
   .on('zoom', e => {
   zoomT = e.transform;
-  g.attr('transform', zoomT);
+  applyCameraTransform();
 });
 svg.call(zoom);
 
-// Drag-to-orbit (only active in 3D, and only when the drag starts on empty space;
-// drags that start on a node are handled by the node's own drag handler below).
+// Drag to look/orbit (only active in 3D, and only when the drag starts on empty
+// space; drags that start on a node are handled by the node's own drag handler).
 const svgNode = svg.node();
 svgNode.addEventListener('pointerdown', e => {
   if (!is3DOn) return;
@@ -1046,14 +1207,33 @@ svgNode.addEventListener('pointerdown', e => {
 });
 window.addEventListener('pointermove', e => {
   if (!orbit3d || !is3DOn) return;
-  yaw3d   += (e.clientX - lastPX) * 0.01;
-  pitch3d += (e.clientY - lastPY) * 0.01;
-  pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
+  const dx = (e.clientX - lastPX) * 0.006;
+  const dy = (e.clientY - lastPY) * 0.006;
   lastPX = e.clientX; lastPY = e.clientY;
-  const ts = document.getElementById('tiltSlider');
-  if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+  if (povMode) {
+    lookYaw   += dx;
+    lookPitch -= dy;                                  // drag up → look up
+    lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
+  } else {
+    yaw3d   += dx;
+    pitch3d += dy;
+    pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
+    const ts = document.getElementById('tiltSlider');
+    if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+  }
 });
 window.addEventListener('pointerup', () => { orbit3d = false; });
+
+// WASD / arrow keys steer the POV camera.
+window.addEventListener('keydown', e => {
+  if (!is3DOn || !povMode) return;
+  const k = e.key.toLowerCase();
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+    keys[k] = true;
+    e.preventDefault();
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
 const g = svg.append('g');
 const mapLayer = g.append('g').attr('id', 'mapLayer');
@@ -1277,14 +1457,20 @@ function update(source) {
       isDragging = true;
       if (is3DOn) {
         // Repositioning individual nodes makes no sense once they're projected;
-        // use the drag to orbit the camera instead.
-        const mx = e.sourceEvent.movementX || 0;
-        const my = e.sourceEvent.movementY || 0;
-        yaw3d   += mx * 0.01;
-        pitch3d += my * 0.01;
-        pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
-        const ts = document.getElementById('tiltSlider');
-        if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+        // use the drag to steer the camera instead.
+        const mx = (e.sourceEvent.movementX || 0) * 0.006;
+        const my = (e.sourceEvent.movementY || 0) * 0.006;
+        if (povMode) {
+          lookYaw   += mx;
+          lookPitch -= my;
+          lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
+        } else {
+          yaw3d   += mx;
+          pitch3d += my;
+          pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
+          const ts = document.getElementById('tiltSlider');
+          if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+        }
         return;
       }
       d.data.ox = e.x; d.data.oy = e.y;
