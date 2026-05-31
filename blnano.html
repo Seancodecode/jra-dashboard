@@ -16,6 +16,8 @@
   .fetch-btn:hover{background:rgba(212,175,55,0.1);border-color:#ffd700;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.5);}
   .audio-btn{border-color:#cc00ff;color:#cc00ff;display:none;}
   .audio-btn:hover{background:rgba(204,0,255,0.1);text-shadow:0 0 10px rgba(204,0,255,0.5);}
+  .tab-btn{border-color:#0088ff;color:#0088ff;}
+  .tab-btn:hover{background:rgba(0,136,255,0.1);text-shadow:0 0 10px rgba(0,136,255,0.5);}
 
   .ctrl-box{background:rgba(10,10,15,0.85);border:1px solid rgba(255,255,255,0.1);
     padding:8px 10px;border-radius:6px;backdrop-filter:blur(8px);}
@@ -119,17 +121,18 @@
 </head>
 <body>
 <div id="cv"></div>
-<div id="welcome">Ready to fetch data.<br>Drag & Drop an MP3/WAV to play audio.</div>
+<div id="welcome">Ready to fetch data.<br>Drag an MP3 or Listen to Tab to play audio.</div>
 
 <div id="dropZone"><div id="dropText">DROP BEATS HERE</div></div>
 
 <div class="ctrls">
   <button class="btn fetch-btn" onclick="fetchData()">Load from Supabase</button>
   <button class="btn" onclick="resetTree()">Reset View</button>
+  <button class="btn tab-btn" id="tabAudioBtn" onclick="captureTabAudio()">Listen to Tab</button>
   <button class="btn audio-btn" id="stopAudioBtn" onclick="stopAudio()">Stop Audio</button>
   
   <div class="ctrl-row audio-control" style="display:none;" id="volumeContainer">
-    <span class="ctrl-label" style="text-transform:none;font-size:10px;">Volume</span>
+    <span class="ctrl-label" style="text-transform:none;font-size:10px;">Local Volume</span>
     <span class="ctrl-val" id="volVal">100%</span>
   </div>
   <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1"
@@ -254,6 +257,7 @@ let analyser = null;
 let gainNode = null;
 let dataArray = null;
 let sourceNode = null;
+let currentStream = null;
 let isAudioPlaying = false;
 
 const dropZone = document.getElementById('dropZone');
@@ -270,12 +274,13 @@ document.addEventListener('drop', async e => {
   dropZone.style.display = 'none';
   const file = e.dataTransfer.files[0];
   if (file && (file.type.includes('audio') || file.name.match(/\.(mp3|wav)$/i))) {
-    handleAudio(file);
+    handleFileAudio(file);
   }
 });
 
-async function handleAudio(file) {
-  if (sourceNode) { sourceNode.stop(); sourceNode.disconnect(); }
+async function handleFileAudio(file) {
+  if (sourceNode) { sourceNode.disconnect(); }
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   
   document.getElementById('welcome').style.display = 'block';
@@ -300,21 +305,77 @@ async function handleAudio(file) {
   gainNode.connect(audioCtx.destination);
   sourceNode.start(0);
   
+  audioStarted();
+}
+
+async function captureTabAudio() {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "browser" },
+      audio: true
+    });
+
+    if (stream.getAudioTracks().length === 0) {
+      alert('Hold up, you forgot to check the "Share tab audio" toggle at the bottom of the popup.');
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
+    if (sourceNode) { sourceNode.disconnect(); }
+    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    currentStream = stream;
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256; 
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    
+    sourceNode.connect(analyser);
+    // Note: Deliberately avoiding connecting to audioCtx.destination here so we don't cause an infinite echo loop of the browser's own audio
+    
+    audioStarted();
+    
+    // Automatically stop visualizer if user clicks "Stop sharing" on the browser banner
+    stream.getVideoTracks()[0].onended = () => {
+      stopAudio();
+    };
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function audioStarted() {
   isAudioPlaying = true;
   document.getElementById('welcome').style.display = 'none';
   document.getElementById('stopAudioBtn').style.display = 'block';
-  document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'flex');
-  document.getElementById('volSlider').style.display = 'block';
+  document.getElementById('tabAudioBtn').style.display = 'none';
+  
+  // Only show the local volume control if we aren't screen sharing (since we don't route screen share back to speakers)
+  if (!currentStream) {
+      document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'flex');
+      document.getElementById('volSlider').style.display = 'block';
+  }
 }
 
 function stopAudio() {
-  if (sourceNode) { sourceNode.stop(); sourceNode.disconnect(); }
+  if (sourceNode) {
+    if (sourceNode.stop) sourceNode.stop();
+    sourceNode.disconnect();
+  }
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+    currentStream = null;
+  }
+  
   isAudioPlaying = false;
   document.getElementById('stopAudioBtn').style.display = 'none';
+  document.getElementById('tabAudioBtn').style.display = 'block';
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
   NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
   
-  // Wipe all ripples instantly
   ripples = [];
   NG.selectAll('.ripple').remove();
 
@@ -360,7 +421,6 @@ function toggleGlowMode() {
     d3.select('#glitchDisplacement').attr('scale', 0);
     applyStaticGlow(manualGlowVal);
     
-    // Wipe ripples if disabling audio mode
     ripples = [];
     NG.selectAll('.ripple').remove();
   }
@@ -392,7 +452,6 @@ function applyStaticGlow(factor) {
   LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
 }
 
-// Generates the geometry for a 7-sided star (heptagram)
 function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
   let rot = Math.PI / 2 * 3;
   let step = Math.PI / spikes;
@@ -433,18 +492,14 @@ d3.timer(elapsed => {
       
       LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
 
-      // Force native fractal noise regeneration 
       d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
-
-      // Audio-driven displacement Map scaling
       let glitchIntensity = smoothedEnergy * 100 * manualGlowVal;
       d3.select('#glitchDisplacement').attr('scale', glitchIntensity);
 
-      // Droplet Emitter Logic (Only in Audio Mode)
       if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) {
         ripples.push({
            id: Math.random().toString(),
-           r: 34, // Root node radius
+           r: 34,
            op: Math.min(1, smoothedEnergy * 1.5),
            thickness: 2 + smoothedEnergy * 5
         });
@@ -457,7 +512,6 @@ d3.timer(elapsed => {
     }
   }
 
-  // Update Droplet Physics
   for (let i = ripples.length - 1; i >= 0; i--) {
       ripples[i].r += 1 + smoothedEnergy * 3;
       ripples[i].op -= 0.01; 
@@ -466,7 +520,6 @@ d3.timer(elapsed => {
       }
   }
 
-  // Render Droplets
   let rootNd = NG.selectAll('g.nd').filter(d => d.id === 'root');
   if (!rootNd.empty()) {
       let rpl = rootNd.select('.ripple-group').selectAll('circle.ripple').data(ripples, d => d.id);
@@ -479,7 +532,7 @@ d3.timer(elapsed => {
          .attr('r', d => d.r)
          .attr('stroke-width', d => d.thickness * d.op)
          .attr('stroke-opacity', d => d.op)
-         .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null); // Ripples distort in the static field too
+         .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null);
          
       rpl.exit().remove();
   }
@@ -834,7 +887,6 @@ const mapLayer = g.append('g').attr('id', 'mapLayer');
 
 const defs = svg.append('defs');
 
-// Pure Radial Gradients for the True Light Aura
 const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
 allColors.forEach(c => {
   const grad = defs.append('radialGradient')
@@ -847,12 +899,10 @@ allColors.forEach(c => {
   grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
 });
 
-// Dynamic Adaptive TV Static Filter utilizing True Displacement
 const staticFilter = defs.append('filter')
   .attr('id', 'tvStatic')
   .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
   
-// Generates high resolution fractal noise
 staticFilter.append('feTurbulence')
   .attr('id', 'noiseGen')
   .attr('type', 'fractalNoise')
@@ -861,7 +911,6 @@ staticFilter.append('feTurbulence')
   .attr('seed', '0')
   .attr('result', 'noise');
 
-// Uses the generated noise to physically warp and tear the radial gradient geometry
 staticFilter.append('feDisplacementMap')
   .attr('id', 'glitchDisplacement')
   .attr('in', 'SourceGraphic')
@@ -893,7 +942,7 @@ function showTip(e, d){
     `<div style="font-weight:700;color:${c};font-size:15px;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.name}</div>` +
     (d.data.g1 ? `<div style="color:${c};font-size:22px;font-family:monospace;line-height:1;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.g1} G1</div>` : '') +
     (d.data.era ? `<div style="color:#8888aa;font-size:12px">${d.data.era}</div>` : '') +
-    (d._children ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
+    (d._children && d.id !== 'root' ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
     linkHtml;
   tipEl.style.opacity = '1';
   tipEl.style.left    = (e.clientX + 15) + 'px';
@@ -1028,7 +1077,6 @@ function update(source) {
     .call(drag)
     .on('mouseover', (e, d) => {
       showTip(e, d);
-      // Hover effects for the nodes
       if (d.id === 'root') {
           d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('transform', 'scale(1.2)');
       } else {
@@ -1047,7 +1095,6 @@ function update(source) {
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  // Pure Math Radial Gradient Aura for all nodes
   inner.append('circle')
     .attr('class', 'aura')
     .attr('r', d => nodeR(d) * 4.5) 
@@ -1056,13 +1103,11 @@ function update(source) {
     .attr('opacity', 0)
     .style('pointer-events', 'none');
 
-  // The Droplet Ripple Layer (Injected only for the central root node)
   inner.filter(d => d.id === 'root')
     .append('g')
     .attr('class', 'ripple-group')
     .style('pointer-events', 'none');
 
-  // Generate a mathematically perfect 7-Sided Star for the central node
   inner.filter(d => d.id === 'root')
     .append('path')
     .attr('class', 'main-node')
@@ -1071,7 +1116,6 @@ function update(source) {
     .attr('stroke', '#fff')
     .attr('stroke-width', 1.5);
 
-  // Keep standard circular rendering for all other descendants
   inner.filter(d => d.id !== 'root')
     .append('circle')
     .attr('class', 'main-node')
@@ -1079,7 +1123,6 @@ function update(source) {
     .attr('fill', d => (d.data.g1 > 0) ? bcolor(d) : '#1a1a26')
     .attr('stroke', d => bcolor(d));
 
-  // Regular Names for Descendant Nodes
   inner.filter(d => d.id !== 'root')
     .append('text').text(d => d.data.name)
     .attr('dy', d => nodeR(d) + 16).attr('text-anchor', 'middle')
@@ -1273,7 +1316,7 @@ async function fetchData() {
        .call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.3).translate(-W/2, -H/2));
 
     document.getElementById('welcome').style.display = 'block';
-    document.getElementById('welcome').innerHTML = 'Data Loaded.<br>Drag & Drop an MP3/WAV anywhere to play.';
+    document.getElementById('welcome').innerHTML = 'Data Loaded.<br>Drag an MP3 or Listen to Tab to play audio.';
     setTimeout(() => { document.getElementById('welcome').style.display = 'none'; }, 4000);
 
   } catch (err) {
