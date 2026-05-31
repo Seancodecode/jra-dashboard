@@ -931,22 +931,41 @@ function showTip(e, d){
   clearTimeout(tipTimeout);
   const c = bcolor(d);
   let linkHtml = '';
+  let imgHtml = '';
+
   if (d.id !== 'root') {
+    imgHtml = `
+      <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; display:flex; justify-content:center; background:rgba(0,0,0,0.5); box-shadow:inset 0 0 10px rgba(0,0,0,0.8);">
+        <img src="https://cdn.netkeiba.com/img.db/horse/${d.id}/${d.id}_1.jpg"
+             onerror="this.onerror=null; this.src='https://db.netkeiba.com/show_photo.php?horse_id=${d.id}&tn=yes'; this.onerror=function(){ this.parentElement.style.display='none'; };"
+             style="max-width:200px; max-height:140px; width:auto; height:auto; object-fit:contain; display:block;" />
+      </div>
+    `;
+
     linkHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);">
       <a href="https://db.netkeiba.com/horse/${d.id}" target="_blank"
          style="color:#00ffcc;text-decoration:none;font-size:11px;font-family:monospace;text-shadow:0 0 5px rgba(0,255,204,0.5);">
         View on Netkeiba ↗
       </a></div>`;
   }
+
   tipEl.innerHTML =
+    imgHtml +
     `<div style="font-weight:700;color:${c};font-size:15px;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.name}</div>` +
     (d.data.g1 ? `<div style="color:${c};font-size:22px;font-family:monospace;line-height:1;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.g1} G1</div>` : '') +
     (d.data.era ? `<div style="color:#8888aa;font-size:12px">${d.data.era}</div>` : '') +
     (d._children && d.id !== 'root' ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
     linkHtml;
+
   tipEl.style.opacity = '1';
-  tipEl.style.left    = (e.clientX + 15) + 'px';
-  tipEl.style.top     = (e.clientY + 15) + 'px';
+  tipEl.style.left = (e.clientX + 15) + 'px';
+  
+  // Flip the tooltip upwards if we are too close to the bottom edge
+  if (e.clientY > window.innerHeight - 250) {
+    tipEl.style.top = (e.clientY - tipEl.offsetHeight - 15) + 'px';
+  } else {
+    tipEl.style.top = (e.clientY + 15) + 'px';
+  }
 }
 
 function hideTip(){
