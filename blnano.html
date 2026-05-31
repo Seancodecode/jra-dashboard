@@ -1123,9 +1123,19 @@ function update(source) {
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  inner.append('circle')
+  // Aura: ellipse for root, circle for everyone else
+  inner.filter(d => d.id === 'root').append('ellipse')
     .attr('class', 'aura')
-    .attr('r', d => nodeR(d) * 4.5) 
+    .attr('rx', d => nodeR(d) * 2.2 * 3.5)
+    .attr('ry', d => nodeR(d) * 1.1 * 3.5)
+    .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
+    .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null)
+    .attr('opacity', 0)
+    .style('pointer-events', 'none');
+
+  inner.filter(d => d.id !== 'root').append('circle')
+    .attr('class', 'aura')
+    .attr('r', d => nodeR(d) * 4.5)
     .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
     .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null)
     .attr('opacity', 0)
@@ -1136,13 +1146,16 @@ function update(source) {
     .attr('class', 'ripple-group')
     .style('pointer-events', 'none');
 
+  // "Eclipse first, the rest nowhere" — the root is an ellipse, not a star.
   inner.filter(d => d.id === 'root')
-    .append('path')
+    .append('ellipse')
     .attr('class', 'main-node')
-    .attr('d', d => getStarPath(0, 0, 7, nodeR(d) * 1.4, nodeR(d) * 0.6))
+    .attr('rx', d => nodeR(d) * 2.2)   // wide axis — like a racing oval
+    .attr('ry', d => nodeR(d) * 1.1)   // shorter vertical
     .attr('fill', d => bcolor(d))
     .attr('stroke', '#fff')
-    .attr('stroke-width', 1.5);
+    .attr('stroke-width', 2)
+    .attr('filter', 'url(#tvStatic)'); // keep the glow filter
 
   inner.filter(d => d.id !== 'root')
     .append('circle')
