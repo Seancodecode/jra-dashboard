@@ -934,14 +934,17 @@ function showTip(e, d){
   let imgHtml = '';
 
   if (d.id !== 'root') {
-    // Aim the proxy directly at the static CDN image instead of the PHP script
     const cdnUrl = `https://cdn.netkeiba.com/img.db/horse/${d.id}/${d.id}_1.jpg`;
-    const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(cdnUrl)}`;
+    
+    // The "Go Stupid" Proxies: Hijacking Search Engine Image Caches
+    const ddgProxy = `https://external-content.duckduckgo.com/iu/?u=${encodeURIComponent(cdnUrl)}`;
+    const googleProxy = `https://images1-focus-opensocial.apps.googleusercontent.com/ig/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(cdnUrl)}`;
 
     imgHtml = `
       <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; display:flex; justify-content:center; background:rgba(0,0,0,0.5); box-shadow:inset 0 0 10px rgba(0,0,0,0.8);">
-        <img src="${proxyUrl}"
-             onerror="this.parentElement.style.display='none';"
+        <img src="${ddgProxy}"
+             referrerpolicy="no-referrer"
+             onerror="if(this.src === '${ddgProxy}') { this.src = '${googleProxy}'; } else { this.parentElement.style.display='none'; }"
              style="max-width:200px; max-height:140px; width:auto; height:auto; object-fit:contain; display:block;" />
       </div>
     `;
