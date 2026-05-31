@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  body{margin:0;background:#050508;overflow:hidden;font-family:system-ui,sans-serif;}
+  #cv{width:100%;height:100vh;}
+
+  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:175px;}
+  .btn{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:monospace;
+    background:rgba(15,15,22,0.92);border:1px solid rgba(255,255,255,0.12);border-radius:6px;
+    padding:6px 12px;color:rgba(255,255,255,0.45);cursor:pointer;transition:all .2s;text-align:center;}
+  .btn:hover{border-color:#00c9a7;color:#00c9a7;text-shadow:0 0 8px rgba(0,201,167,0.5);}
+  .fetch-btn{border-color:#d4af37;color:#d4af37;}
+  .fetch-btn:hover{background:rgba(212,175,55,0.1);border-color:#ffd700;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.5);}
+  .audio-btn{border-color:#cc00ff;color:#cc00ff;display:none;}
+  .audio-btn:hover{background:rgba(204,0,255,0.1);text-shadow:0 0 10px rgba(204,0,255,0.5);}
+  .tab-btn{border-color:#0088ff;color:#0088ff;}
+  .tab-btn:hover{background:rgba(0,136,255,0.1);text-shadow:0 0 10px rgba(0,136,255,0.5);}
+
+  .ctrl-box{background:rgba(10,10,15,0.85);border:1px solid rgba(255,255,255,0.1);
+    padding:8px 10px;border-radius:6px;backdrop-filter:blur(8px);}
+  .ctrl-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+  .ctrl-label{font-size:9px;color:rgba(255,255,255,0.4);font-family:monospace;
+    text-transform:uppercase;letter-spacing:1px;}
+  .ctrl-val{font-size:10px;color:#d4af37;font-family:monospace;}
+  input[type=range]{width:100%;cursor:pointer;accent-color:#00c9a7;margin:0;}
+
+  #tip{position:absolute;background:rgba(15,15,22,0.95);border:1px solid rgba(255,255,255,0.15);
+    border-radius:8px;padding:12px 16px;font-size:13px;color:#f0f0f0;
+    box-shadow:0 10px 40px rgba(0,0,0,0.8);opacity:0;transition:opacity .2s;z-index:30;max-width:220px;
+    pointer-events:auto;left:-9999px;backdrop-filter:blur(10px);}
+  #tip a:hover{color:#fff !important;text-shadow:0 0 10px rgba(79,195,247,0.8);}
+
+  .hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+    font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:1px;font-family:monospace;
+    pointer-events:none;white-space:nowrap;}
+  #welcome{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    color:rgba(255,255,255,0.4);font-family:monospace;text-align:center;pointer-events:none;
+    text-shadow:0 0 10px rgba(255,255,255,0.1);z-index:10;}
+
+  #dropZone{position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,201,167,0.1);border:4px dashed rgba(0,201,167,0.5);
+    z-index:9999;display:none;justify-content:center;align-items:center;
+    pointer-events:none;backdrop-filter:blur(4px);}
+  #dropText{font-size:32px;font-family:monospace;color:#00c9a7;font-weight:800;
+    text-transform:uppercase;letter-spacing:4px;text-shadow:0 0 20px rgba(0,201,167,0.8);}
+
+  #rankToggle{
+    position:fixed;right:0;top:50%;transform:translateY(-50%);
+    background:rgba(13,13,18,0.95);
+    border:1px solid rgba(255,255,255,0.12);border-right:none;
+    border-radius:8px 0 0 8px;
+    padding:14px 7px;cursor:pointer;z-index:40;
+    display:flex;flex-direction:column;align-items:center;gap:7px;
+    transition:right .35s cubic-bezier(.4,0,.2,1), border-color .2s;
+    user-select:none;
+  }
+  #rankToggle:hover{border-color:#d4af37;box-shadow:0 0 15px rgba(212,175,55,0.3);}
+  #rankToggle .rt-icon{font-size:15px;line-height:1;}
+  #rankToggle .rt-label{
+    font-size:8px;letter-spacing:2px;text-transform:uppercase;font-family:monospace;
+    color:rgba(255,255,255,0.4);writing-mode:vertical-rl;
+  }
+
+  #rankPanel{
+    position:fixed;right:-300px;top:0;height:100vh;width:300px;
+    background:rgba(10,10,15,0.92);border-left:1px solid rgba(255,255,255,0.1);
+    z-index:35;display:flex;flex-direction:column;
+    transition:right .35s cubic-bezier(.4,0,.2,1);
+    backdrop-filter:blur(20px);
+  }
+  #rankPanel.open{right:0;box-shadow:-10px 0 50px rgba(0,0,0,0.8);}
+
+  .rp-header{
+    padding:22px 18px 14px;
+    border-bottom:1px solid rgba(255,255,255,0.07);
+    flex-shrink:0;
+  }
+  .rp-eyebrow{font-family:monospace;font-size:9px;letter-spacing:2px;
+    text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:4px;}
+  .rp-title{font-size:19px;font-weight:700;color:#d4af37;letter-spacing:.5px;text-shadow:0 0 10px rgba(212,175,55,0.4);}
+  .rp-sub{font-size:10px;color:rgba(255,255,255,0.2);margin-top:3px;font-family:monospace;}
+
+  .rp-list{overflow-y:auto;flex:1;padding:6px 0;}
+  .rp-list::-webkit-scrollbar{width:3px;}
+  .rp-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px;}
+
+  .rp-row{
+    display:flex;align-items:center;gap:10px;
+    padding:7px 16px;cursor:pointer;
+    transition:background .15s;border-left:2px solid transparent;
+  }
+  .rp-row:hover{background:rgba(255,255,255,0.05);border-left-color:rgba(212,175,55,0.5);}
+  .rp-row.active{background:rgba(212,175,55,0.08);border-left-color:#d4af37;}
+
+  .rp-rank{font-family:monospace;font-size:11px;width:24px;
+    text-align:right;flex-shrink:0;color:rgba(255,255,255,0.2);}
+  .rp-rank.gold  {color:#ffd700;font-size:14px;text-shadow:0 0 8px rgba(255,215,0,0.6);}
+  .rp-rank.silver{color:#c0c0c0;font-size:14px;text-shadow:0 0 8px rgba(192,192,192,0.6);}
+  .rp-rank.bronze{color:#cd7f32;font-size:14px;text-shadow:0 0 8px rgba(205,127,50,0.6);}
+
+  .rp-info{flex:1;min-width:0;}
+  .rp-name{font-size:12px;font-weight:600;color:#fff;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .rp-era{font-size:9px;color:rgba(255,255,255,0.3);margin-top:1px;}
+
+  .rp-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
+  .rp-g1{font-family:monospace;font-size:13px;font-weight:700;color:#d4af37;}
+  .rp-bar{width:52px;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;}
+  .rp-bar-fill{height:100%;border-radius:2px;
+    background:linear-gradient(90deg,#d4af37 0%,#ff3366 100%);box-shadow:0 0 5px rgba(255,51,102,0.5);}
+
+  .rp-footer{
+    padding:10px 16px;border-top:1px solid rgba(255,255,255,0.07);
+    font-size:8px;color:rgba(255,255,255,0.2);font-family:monospace;
+    letter-spacing:1px;text-transform:uppercase;flex-shrink:0;line-height:1.6;
+  }
+</style>
+</head>
+<body>
+<div id="cv"></div>
+<div id="welcome">Ready to fetch data.<br>Drag an MP3 or Listen to Tab to play audio.</div>
+
+<div id="dropZone"><div id="dropText">DROP BEATS HERE</div></div>
+
+<div class="ctrls">
+  <button class="btn fetch-btn" onclick="fetchData()">Load from Supabase</button>
+  <button class="btn" onclick="resetTree()">Reset View</button>
+  <button class="btn tab-btn" id="tabAudioBtn" onclick="captureTabAudio()">Listen to Tab</button>
+  <button class="btn audio-btn" id="stopAudioBtn" onclick="stopAudio()">Stop Audio</button>
+  
+  <div class="ctrl-row audio-control" style="display:none;" id="volumeContainer">
+    <span class="ctrl-label" style="text-transform:none;font-size:10px;">Local Volume</span>
+    <span class="ctrl-val" id="volVal">100%</span>
+  </div>
+  <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1"
+         oninput="updateVolume(this.value)" style="opacity:0.8;margin-bottom:8px;display:none;accent-color:#cc00ff;" class="audio-control">
+
+  <div class="ctrl-box">
+    <div class="ctrl-row">
+      <span class="ctrl-label">Depth Limit</span>
+      <span class="ctrl-val" id="levelVal">0 / 0</span>
+    </div>
+    <input type="range" id="levelSlider" min="0" max="10" step="1" value="0"
+           oninput="onLevelSlide(this.value)" style="accent-color:#d4af37;">
+  </div>
+
+  <div class="ctrl-box">
+    <div class="ctrl-row">
+      <span class="ctrl-label">Ring Spread</span>
+      <span class="ctrl-val" id="spreadVal">1.0x</span>
+    </div>
+    <input type="range" min="0.5" max="3" step="0.1" value="1"
+           oninput="updateSpacing(this.value)">
+  </div>
+
+  <div class="ctrl-box">
+    <div class="ctrl-row" style="border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:5px;margin-bottom:8px;">
+      <span class="ctrl-label">Visuals & Animations</span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Glow Mode</span>
+      <button class="btn" id="glowModeBtn" onclick="toggleGlowMode()" style="padding:2px 6px;font-size:8px;">MANUAL</button>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="glowLabel">Intensity</span>
+      <span class="ctrl-val" id="glowVal">1.0x</span>
+    </div>
+    <input type="range" id="glowSlider" min="0" max="4.0" step="0.1" value="1.0"
+           oninput="updateGlowSlider(this.value)" style="opacity:0.8;margin-bottom:10px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Spin Map</span>
+      <button class="btn" id="spinBtn" onclick="toggleSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="spinSpeed" min="-5" max="5" step="0.1" value="1"
+           oninput="spinSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:10px;">
+    
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Pulse Nodes</span>
+      <button class="btn" id="waveBtn" onclick="toggleWave()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="waveSpeed" min="0.2" max="3" step="0.1" value="1"
+           oninput="waveSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Wobble Links</span>
+      <button class="btn" id="wobbleBtn" onclick="toggleWobble()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="wobbleSpeed" min="0.5" max="5" step="0.1" value="2"
+           oninput="wobbleSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Waveform</span>
+      <button class="btn" id="spectrumBtn" onclick="toggleSpectrum()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+    <input type="range" id="spectrumSpeed" min="0.5" max="5" step="0.1" value="2"
+           oninput="spectrumSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Float & Bounce</span>
+      <button class="btn" id="floatBtn" onclick="toggleFloat()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+
+    <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Galaxy</span>
+      <button class="btn" id="threeDBtn" onclick="toggle3D()" style="padding:2px 6px;font-size:8px;">OFF</button>
+    </div>
+
+    <div id="threeDControls" style="display:none;">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
+        <span class="ctrl-val" id="tiltVal">32°</span>
+      </div>
+      <input type="range" id="tiltSlider" min="-1.4" max="1.4" step="0.01" value="0.55"
+             oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
+
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Spin</span>
+        <span class="ctrl-val" id="spin3dVal">0.6x</span>
+      </div>
+      <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0.6"
+             oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
+
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Bulge</span>
+        <span class="ctrl-val" id="bulge3dVal">140</span>
+      </div>
+      <input type="range" id="bulge3dSlider" min="0" max="400" step="5" value="140"
+             oninput="setBulge3D(this.value)" style="opacity:0.8;margin-bottom:4px;">
+
+      <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;">
+        DRAG TO ORBIT · SCROLL TO ZOOM
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rankToggle" onclick="toggleRankPanel()">
+  <span class="rt-icon">🏆</span>
+  <span class="rt-label">Rankings</span>
+</div>
+
+<div id="rankPanel">
+  <div class="rp-header">
+    <div class="rp-eyebrow">G1 Pedigree Leaders</div>
+    <div class="rp-title">All-Time Ranking</div>
+    <div class="rp-sub">by total G1 wins</div>
+  </div>
+  <div class="rp-list" id="rpList"></div>
+  <div class="rp-footer">
+    Click a row to highlight node in tree<br>
+    Node size reflects G1 win count
+  </div>
+</div>
+
+<div id="tip"></div>
+<div class="hint">Click to expand/collapse · Drag node to reposition · Scroll to zoom</div>
+
+<script>
+const W = window.innerWidth, H = window.innerHeight;
+const cx = W/2, cy = H/2;
+let root = null;
+let spreadFactor = 1;
+let maxDepth = 0;
+
+let globalTime    = 0;
+let glowMode      = 'manual';
+let manualGlowVal = 1.0;
+let smoothedEnergy= 0;
+let isWaveOn      = false;
+let waveSpeed     = 1;
+let isWobbleOn    = false;
+let wobbleSpeed   = 2;
+let isSpectrumOn  = false;
+let spectrumSpeed = 2;
+let isFloatOn     = false;
+let floatSim      = null;
+let isSpinOn      = false;
+let spinSpeed     = 1;
+let mapAngle      = 0;
+let ripples       = [];
+
+let is3DOn        = false;
+let yaw3d         = 0;
+let pitch3d       = 0.55;
+let spin3dSpeed   = 0.6;
+let bulge3d       = 140;
+let focal3d       = 820;
+let orbit3d       = false;
+let lastPX        = 0, lastPY = 0;
+
+let audioCtx = null;
+let analyser = null;
+let gainNode = null;
+let dataArray = null;
+let sourceNode = null;
+let currentStream = null;
+let isAudioPlaying = false;
+
+const dropZone = document.getElementById('dropZone');
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.style.display = 'flex';
+});
+document.addEventListener('dragleave', e => {
+  e.preventDefault();
+  if(e.relatedTarget === null) dropZone.style.display = 'none';
+});
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  dropZone.style.display = 'none';
+  const file = e.dataTransfer.files[0];
+  if (file && (file.type.includes('audio') || file.name.match(/\.(mp3|wav)$/i))) {
+    handleFileAudio(file);
+  }
+});
+
+async function handleFileAudio(file) {
+  if (sourceNode) { sourceNode.disconnect(); }
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  
+  document.getElementById('welcome').style.display = 'block';
+  document.getElementById('welcome').innerHTML = 'Decoding Audio...';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  
+  sourceNode = audioCtx.createBufferSource();
+  sourceNode.buffer = audioBuffer;
+  
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256; 
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+  
+  gainNode = audioCtx.createGain();
+  const volSlider = document.getElementById('volSlider');
+  gainNode.gain.value = parseFloat(volSlider.value);
+  
+  sourceNode.connect(analyser);
+  analyser.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  sourceNode.start(0);
+  
+  audioStarted();
+}
+
+async function captureTabAudio() {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "browser" },
+      audio: true
+    });
+
+    if (stream.getAudioTracks().length === 0) {
+      alert('Hold up, you forgot to check the "Share tab audio" toggle at the bottom of the popup.');
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
+    if (sourceNode) { sourceNode.disconnect(); }
+    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    currentStream = stream;
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256; 
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    
+    sourceNode.connect(analyser);
+    // Note: Deliberately avoiding connecting to audioCtx.destination here so we don't cause an infinite echo loop of the browser's own audio
+    
+    audioStarted();
+    
+    // Automatically stop visualizer if user clicks "Stop sharing" on the browser banner
+    stream.getVideoTracks()[0].onended = () => {
+      stopAudio();
+    };
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function audioStarted() {
+  isAudioPlaying = true;
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('stopAudioBtn').style.display = 'block';
+  document.getElementById('tabAudioBtn').style.display = 'none';
+  
+  // Only show the local volume control if we aren't screen sharing (since we don't route screen share back to speakers)
+  if (!currentStream) {
+      document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'flex');
+      document.getElementById('volSlider').style.display = 'block';
+  }
+}
+
+function stopAudio() {
+  if (sourceNode) {
+    if (sourceNode.stop) sourceNode.stop();
+    sourceNode.disconnect();
+  }
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+    currentStream = null;
+  }
+  
+  isAudioPlaying = false;
+  document.getElementById('stopAudioBtn').style.display = 'none';
+  document.getElementById('tabAudioBtn').style.display = 'block';
+  document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
+  NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
+  
+  ripples = [];
+  NG.selectAll('.ripple').remove();
+
+  applyStaticGlow(glowMode === 'audio' ? 0 : manualGlowVal);
+  d3.select('#glitchDisplacement').attr('scale', 0);
+}
+
+function updateVolume(val) {
+  document.getElementById('volVal').textContent = Math.round(val * 100) + '%';
+  if (gainNode) {
+    gainNode.gain.value = parseFloat(val);
+  }
+}
+
+function toggleGlowMode() {
+  const btn = document.getElementById('glowModeBtn');
+  const slider = document.getElementById('glowSlider');
+  const label = document.getElementById('glowLabel');
+  const valDisp = document.getElementById('glowVal');
+
+  if (glowMode === 'manual') {
+    glowMode = 'audio';
+    btn.textContent = 'AUDIO';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '0.3';
+    slider.style.pointerEvents = 'none';
+    label.textContent = 'Max Threshold';
+    valDisp.textContent = manualGlowVal.toFixed(1) + 'x Cap';
+    
+    NG.selectAll('.aura').attr('filter', 'url(#tvStatic)');
+  } else {
+    glowMode = 'manual';
+    btn.textContent = 'MANUAL';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.8';
+    slider.style.pointerEvents = 'auto';
+    label.textContent = 'Intensity';
+    valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
+    
+    NG.selectAll('.aura').attr('filter', null);
+    d3.select('#glitchDisplacement').attr('scale', 0);
+    applyStaticGlow(manualGlowVal);
+    
+    ripples = [];
+    NG.selectAll('.ripple').remove();
+  }
+}
+
+function updateGlowSlider(val) {
+  manualGlowVal = parseFloat(val);
+  if (glowMode === 'manual') {
+    document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x';
+    applyStaticGlow(manualGlowVal);
+  } else {
+    document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x Cap';
+  }
+}
+
+function applyStaticGlow(factor) {
+  if (glowMode === 'audio') return; 
+
+  NG.selectAll('.aura')
+    .attr('opacity', factor * 0.25)
+    .attr('transform', `scale(${1 + (factor * 0.3)})`);
+
+  NG.selectAll('.main-node')
+    .attr('fill-opacity', d => {
+       let base = d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.8 : 0.15);
+       return Math.min(1, base + (factor * 0.05));
+    });
+
+  LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
+}
+
+function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
+  let rot = Math.PI / 2 * 3;
+  let step = Math.PI / spikes;
+  let path = '';
+  for(let i = 0; i < spikes; i++) {
+    let x = cx + Math.cos(rot) * outerRadius;
+    let y = cy + Math.sin(rot) * outerRadius;
+    path += (i === 0 ? 'M' : 'L') + x + ',' + y;
+    rot += step;
+    x = cx + Math.cos(rot) * innerRadius;
+    y = cy + Math.sin(rot) * innerRadius;
+    path += 'L' + x + ',' + y;
+    rot += step;
+  }
+  path += 'Z';
+  return path;
+}
+
+d3.timer(elapsed => {
+  globalTime = elapsed;
+  
+  if (isSpinOn) {
+    mapAngle += spinSpeed * 0.2;
+    d3.select('#mapLayer').attr('transform', `rotate(${mapAngle}, ${cx}, ${cy})`);
+  }
+  
+  let hasAudioData = false;
+  if (isAudioPlaying && analyser) {
+    analyser.getByteFrequencyData(dataArray);
+    hasAudioData = true;
+    
+    if (glowMode === 'audio') {
+      let sum = 0;
+      let limit = Math.floor(dataArray.length * 0.4);
+      for(let i = 0; i < limit; i++) sum += dataArray[i];
+      let currentEnergy = Math.min(1, ((sum / limit) / 255));
+      smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.3;
+      
+      LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
+
+      d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
+      let glitchIntensity = smoothedEnergy * 100 * manualGlowVal;
+      d3.select('#glitchDisplacement').attr('scale', glitchIntensity);
+
+      if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) {
+        ripples.push({
+           id: Math.random().toString(),
+           r: 34,
+           op: Math.min(1, smoothedEnergy * 1.5),
+           thickness: 2 + smoothedEnergy * 5
+        });
+      }
+    }
+  } else {
+    if (glowMode === 'audio') {
+        smoothedEnergy = 0;
+        d3.select('#glitchDisplacement').attr('scale', 0);
+    }
+  }
+
+  for (let i = ripples.length - 1; i >= 0; i--) {
+      ripples[i].r += 1 + smoothedEnergy * 3;
+      ripples[i].op -= 0.01; 
+      if (ripples[i].op <= 0) {
+          ripples.splice(i, 1);
+      }
+  }
+
+  let rootNd = NG.selectAll('g.nd').filter(d => d.id === 'root');
+  if (!rootNd.empty()) {
+      let rpl = rootNd.select('.ripple-group').selectAll('circle.ripple').data(ripples, d => d.id);
+      
+      rpl.enter().append('circle')
+         .attr('class', 'ripple')
+         .attr('fill', 'none')
+         .attr('stroke', '#ffd700')
+         .merge(rpl)
+         .attr('r', d => d.r)
+         .attr('stroke-width', d => d.thickness * d.op)
+         .attr('stroke-opacity', d => d.op)
+         .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null);
+         
+      rpl.exit().remove();
+  }
+
+  NG.selectAll('g.node-inner').each(function(d) {
+    let el = d3.select(this);
+    let scale = 1;
+    let audioScale = 0;
+
+    if (hasAudioData) {
+      let safeDepth = Math.max(1, maxDepth);
+      let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
+      binIndex = Math.min(binIndex, dataArray.length - 1);
+      
+      let normFreq = (dataArray[binIndex] || 0) / 255;
+      
+      if (glowMode === 'audio') {
+        let energy = Math.pow(normFreq, 2); 
+        let cappedEnergy = energy * manualGlowVal; 
+        
+        el.select('.aura')
+          .attr('opacity', Math.min(1, cappedEnergy * 1.5))
+          .attr('transform', `scale(${1 + (cappedEnergy * 1.5)})`);
+
+        let base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.15);
+        el.select('.main-node')
+          .attr('fill-opacity', Math.min(1, base + cappedEnergy * 0.4));
+      }
+      
+      audioScale = normFreq * 0.8;
+    }
+
+    if (isWaveOn) {
+      const phase = d.depth * 1.5;
+      scale = 1 + (audioScale * 0.3) + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
+    } else {
+      scale = 1 + (audioScale * 0.3);
+    }
+    
+    el.attr('transform', `scale(${scale})`);
+  });
+
+  if (isSpectrumOn || (isWobbleOn && !isFloatOn)) {
+    redrawLinksFast();
+  }
+
+  if (is3DOn) {
+    if (!orbit3d) yaw3d += spin3dSpeed * 0.01;
+    project3D();
+  }
+});
+
+function onLevelSlide(val) {
+  const v = parseInt(val);
+  document.getElementById('levelVal').textContent = v + ' / ' + maxDepth;
+  
+  if (!root) return;
+  
+  traverseAll(root, d => {
+    if (d.depth < v && d._children) {
+      d.children = d._children;
+    } else {
+      d.children = null;
+    }
+    d.data.ox = null; 
+    d.data.oy = null;
+  });
+  
+  update(root);
+}
+
+function updateSpacing(val) {
+  spreadFactor = parseFloat(val);
+  document.getElementById('spreadVal').textContent = parseFloat(val).toFixed(1) + 'x';
+  if (root) {
+    traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
+    update(root);
+  }
+}
+
+function toggleSpin() {
+  isSpinOn = !isSpinOn;
+  const btn = document.getElementById('spinBtn');
+  const slider = document.getElementById('spinSpeed');
+  if (isSpinOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '1';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
+  }
+}
+
+function toggleWave() {
+  isWaveOn = !isWaveOn;
+  const btn = document.getElementById('waveBtn');
+  const slider = document.getElementById('waveSpeed');
+  if (isWaveOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '1';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
+    if (!isAudioPlaying) {
+        NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
+    }
+  }
+}
+
+function toggleWobble() {
+  isWobbleOn = !isWobbleOn;
+  const btn = document.getElementById('wobbleBtn');
+  const slider = document.getElementById('wobbleSpeed');
+  if (isWobbleOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '1';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
+    redrawLinksFast();
+  }
+}
+
+function toggleSpectrum() {
+  isSpectrumOn = !isSpectrumOn;
+  const btn = document.getElementById('spectrumBtn');
+  const slider = document.getElementById('spectrumSpeed');
+  if (isSpectrumOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '1';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    slider.style.opacity = '0.5';
+    redrawLinksFast();
+  }
+}
+
+function toggleFloat() {
+  isFloatOn = !isFloatOn;
+  const btn = document.getElementById('floatBtn');
+  
+  if (isFloatOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
+    
+    const nodes = root.descendants();
+    nodes.forEach(d => {
+      if (isNaN(d.x) || d.x === undefined) { d.x = d.cartX; d.y = d.cartY; }
+      d.vx = 0; d.vy = 0;
+    });
+
+    floatSim = d3.forceSimulation(nodes)
+      .alphaDecay(0)
+      .velocityDecay(0.15)
+      .force('collide', d3.forceCollide().radius(d => nodeR(d) + 8).iterations(2))
+      .force('x', d3.forceX(d => d.cartX0).strength(0.04))
+      .force('y', d3.forceY(d => d.cartY0).strength(0.04))
+      .on('tick', () => {
+         nodes.forEach(d => {
+           if (!d.data.ox) {
+             d.vx += (Math.random() - 0.5) * 0.5;
+             d.vy += (Math.random() - 0.5) * 0.5;
+             d.cartX = d.x;
+             d.cartY = d.y;
+           } else {
+             d.x = d.data.ox;
+             d.y = d.data.oy;
+             d.cartX = d.data.ox;
+             d.cartY = d.data.oy;
+           }
+         });
+         NG.selectAll('g.nd').attr('transform', d => `translate(${d.cartX},${d.cartY})`);
+         redrawLinksFast();
+      });
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    btn.style.boxShadow = 'none';
+    
+    if (floatSim) {
+       floatSim.stop();
+       floatSim = null;
+    }
+    
+    const nodes = root.descendants();
+    nodes.forEach(d => {
+       d.cartX = d.data.ox || d.cartX0;
+       d.cartY = d.data.oy || d.cartY0;
+    });
+    
+    NG.selectAll('g.nd')
+      .transition().duration(600)
+      .attr('transform', d => `translate(${d.cartX},${d.cartY})`);
+      
+    d3.select(g.node()).transition().duration(600).tween('links', () => {
+      return () => { if (!isFloatOn) redrawLinksFast(); };
+    });
+  }
+}
+
+let rankOpen = false;
+
+// ── 3D Galaxy mode ────────────────────────────────────────────────────────────
+// Projects each node's existing ring position (angle d.x, radius d.y) into 3D:
+// a tilted, spinning disc with a center bulge. We rotate around Y (yaw) and X
+// (pitch), perspective-project back to cartX/cartY, depth-sort, then scale + dim
+// nodes by depth. Everything downstream (links, tooltips, audio, zoom) already
+// reads cartX/cartY, so it all keeps working.
+function setTilt(v){
+  pitch3d = parseFloat(v);
+  document.getElementById('tiltVal').textContent = Math.round(pitch3d * 180 / Math.PI) + '\u00b0';
+}
+function setSpin3D(v){
+  spin3dSpeed = parseFloat(v);
+  document.getElementById('spin3dVal').textContent = parseFloat(v).toFixed(1) + 'x';
+}
+function setBulge3D(v){
+  bulge3d = parseFloat(v);
+  document.getElementById('bulge3dVal').textContent = Math.round(bulge3d);
+}
+
+function toggle3D(){
+  is3DOn = !is3DOn;
+  const btn = document.getElementById('threeDBtn');
+  const ctl = document.getElementById('threeDControls');
+
+  if (is3DOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
+    ctl.style.display = 'block';
+
+    // Conflicting modes manipulate position/rotation directly — turn them off.
+    if (isFloatOn) toggleFloat();
+    if (isSpinOn)  toggleSpin();
+    mapAngle = 0;
+    d3.select('#mapLayer').attr('transform', null);
+
+    if (root) {
+      // Clear any manual node positions so the disc is clean, then refresh layout.
+      traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
+      update(root);
+      project3D();
+    }
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    btn.style.boxShadow = 'none';
+    ctl.style.display = 'none';
+    if (root) update(root); // restores flat radial layout, scale=1, opacity=1
+  }
+}
+
+function project3D(){
+  if (!root) return;
+  const nodes = root.descendants();
+
+  let maxR = 1;
+  nodes.forEach(d => { if (d.y > maxR) maxR = d.y; });
+
+  const cyaw = Math.cos(yaw3d),  syaw = Math.sin(yaw3d);
+  const cpit = Math.cos(pitch3d), spit = Math.sin(pitch3d);
+
+  let zmin = Infinity, zmax = -Infinity;
+
+  nodes.forEach(d => {
+    // In-plane (disc-local) coordinates from the existing radial layout.
+    const lx = d.y * Math.cos(d.x - Math.PI / 2);
+    const ly = d.y * Math.sin(d.x - Math.PI / 2);
+    const lz = (1 - d.y / maxR) * bulge3d; // center pops toward viewer
+
+    // Rotate around Y (yaw)
+    const x1 =  lx * cyaw + lz * syaw;
+    const z1 = -lx * syaw + lz * cyaw;
+    const y1 =  ly;
+
+    // Rotate around X (pitch)
+    const y2 = y1 * cpit - z1 * spit;
+    const z2 = y1 * spit + z1 * cpit;
+    const x2 = x1;
+
+    // Perspective projection (larger z = nearer = bigger)
+    let denom = focal3d - z2;
+    if (denom < 60) denom = 60;
+    const persp = focal3d / denom;
+
+    d.cartX  = cx + x2 * persp;
+    d.cartY  = cy + y2 * persp;
+    d._z3    = z2;
+    d._persp = persp;
+
+    if (z2 < zmin) zmin = z2;
+    if (z2 > zmax) zmax = z2;
+  });
+
+  const zrange = (zmax - zmin) || 1;
+
+  NG.selectAll('g.nd')
+    .attr('transform', d => `translate(${d.cartX},${d.cartY}) scale(${d._persp})`)
+    .attr('opacity',   d => 0.35 + 0.65 * ((d._z3 - zmin) / zrange))
+    .sort((a, b) => a._z3 - b._z3); // farthest first → nearest drawn on top
+
+  redrawLinksFast();
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
+
+function toggleRankPanel() {
+  rankOpen = !rankOpen;
+  document.getElementById('rankPanel').classList.toggle('open', rankOpen);
+  document.getElementById('rankToggle').style.right = rankOpen ? '300px' : '0';
+}
+
+function focusNode(id) {
+  if (!root) return;
+
+  let target = null;
+  root.each(d => {
+    if (d.id === String(id)) target = d;
+  });
+
+  if (!target) return;
+
+  let current = target.parent;
+  let changed = false;
+  while (current) {
+    if (!current.children && current._children) {
+      current.children = current._children;
+      changed = true;
+    }
+    current = current.parent;
+  }
+
+  if (changed) {
+    update(root);
+  }
+
+  const zoomLevel = 2; 
+  const t = d3.zoomIdentity
+    .translate(cx, cy)
+    .scale(zoomLevel)
+    .translate(-target.cartX, -target.cartY);
+
+  svg.transition().duration(800).call(zoom.transform, t);
+
+  pulseNode(id);
+}
+
+function buildRankPanel(nodesMap) {
+  const sorted = Object.values(nodesMap)
+    .filter(n => n.g1 > 0)
+    .sort((a, b) => b.g1 - a.g1);
+
+  const maxG1 = sorted[0]?.g1 || 1;
+  const list  = document.getElementById('rpList');
+  list.innerHTML = '';
+
+  sorted.forEach((n, i) => {
+    const pct      = (n.g1 / maxG1 * 100).toFixed(1);
+    const medals   = ['🥇','🥈','🥉'];
+    const rankHtml = i < 3
+      ? `<div class="rp-rank ${['gold','silver','bronze'][i]}">${medals[i]}</div>`
+      : `<div class="rp-rank">${i + 1}</div>`;
+
+    const row = document.createElement('div');
+    row.className = 'rp-row';
+    row.dataset.id = n.id;
+    row.innerHTML = `
+      ${rankHtml}
+      <div class="rp-info">
+        <div class="rp-name" title="${n.name}">${n.name}</div>
+        ${n.era ? `<div class="rp-era">${n.era}</div>` : ''}
+      </div>
+      <div class="rp-right">
+        <div class="rp-g1">${n.g1} G1</div>
+        <div class="rp-bar"><div class="rp-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+
+    row.addEventListener('click', () => {
+      document.querySelectorAll('.rp-row').forEach(r => r.classList.remove('active'));
+      row.classList.add('active');
+      focusNode(n.id);
+    });
+
+    list.appendChild(row);
+  });
+}
+
+function pulseNode(id) {
+  const sel = NG.selectAll('g.nd').filter(d => d.id === String(id)).select('.main-node');
+  
+  if (id === 'root') {
+    sel.transition().duration(180).attr('transform', 'scale(1.8)')
+       .transition().duration(180).attr('transform', 'scale(1.2)')
+       .transition().duration(180).attr('transform', 'scale(1.5)')
+       .transition().duration(180).attr('transform', 'scale(1.1)')
+       .transition().duration(300).attr('transform', 'scale(1)');
+  } else {
+    sel.transition().duration(180).attr('r', d => nodeR(d) * 2.8)
+       .transition().duration(180).attr('r', d => nodeR(d) * 1.6)
+       .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
+       .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
+       .transition().duration(300).attr('r', d => nodeR(d));
+  }
+}
+
+const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2VmbGF5a3R4eWppZHZrZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODQyMjMsImV4cCI6MjA5NTY2MDIyM30.Yq0sdcWYzB0rQyMdXlOAwFAi1wFrHkJcdYs-0Z6uJvU';
+const db = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+const colorScale = d3.scaleOrdinal([
+  '#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500',
+  '#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222'
+]);
+
+function bcolor(d){
+  if (d.id === 'root') return '#ffd700';
+  let c = d;
+  while (c.parent && c.parent.id !== 'root') c = c.parent;
+  return colorScale(c.id);
+}
+
+function nodeR(d){
+  if (d.id === 'root') return 34;
+  const g1 = d.data.g1 || 0;
+  if (g1 >= 10) return 22; if (g1 >= 7) return 18;
+  if (g1 >= 4)  return 14; if (g1 >= 1) return 11;
+  return 7;
+}
+
+const RADII = [0, 160, 340, 520, 700, 880, 1060];
+
+const svg  = d3.select('#cv').append('svg').attr('width', W).attr('height', H);
+let zoomT  = d3.zoomIdentity;
+const zoom = d3.zoom().scaleExtent([0.05, 8])
+  .filter(ev => is3DOn ? ev.type === 'wheel' : (!ev.ctrlKey && !ev.button))
+  .on('zoom', e => {
+  zoomT = e.transform;
+  g.attr('transform', zoomT);
+});
+svg.call(zoom);
+
+// Drag-to-orbit (only active in 3D, and only when the drag starts on empty space;
+// drags that start on a node are handled by the node's own drag handler below).
+const svgNode = svg.node();
+svgNode.addEventListener('pointerdown', e => {
+  if (!is3DOn) return;
+  orbit3d = true; lastPX = e.clientX; lastPY = e.clientY;
+});
+window.addEventListener('pointermove', e => {
+  if (!orbit3d || !is3DOn) return;
+  yaw3d   += (e.clientX - lastPX) * 0.01;
+  pitch3d += (e.clientY - lastPY) * 0.01;
+  pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
+  lastPX = e.clientX; lastPY = e.clientY;
+  const ts = document.getElementById('tiltSlider');
+  if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+});
+window.addEventListener('pointerup', () => { orbit3d = false; });
+
+const g = svg.append('g');
+const mapLayer = g.append('g').attr('id', 'mapLayer');
+
+const defs = svg.append('defs');
+
+const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
+allColors.forEach(c => {
+  const grad = defs.append('radialGradient')
+    .attr('id', 'glow-' + c.replace('#', ''))
+    .attr('cx', '50%').attr('cy', '50%').attr('r', '50%');
+    
+  grad.append('stop').attr('offset', '0%').attr('stop-color', '#fff').attr('stop-opacity', 1);
+  grad.append('stop').attr('offset', '15%').attr('stop-color', c).attr('stop-opacity', 0.8);
+  grad.append('stop').attr('offset', '50%').attr('stop-color', c).attr('stop-opacity', 0.3);
+  grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
+});
+
+// ── Metallic crescent gradient ────────────────────────────────────────────────
+// Linear gradient angled at ~45° — bright highlight streak across the gold,
+// with deep shadow at the edges to sell the 3D metallic look.
+const metalGrad = defs.append('linearGradient')
+  .attr('id', 'metallic-crescent')
+  .attr('x1', '0%').attr('y1', '0%')
+  .attr('x2', '100%').attr('y2', '100%');
+
+metalGrad.append('stop').attr('offset',  '0%').attr('stop-color', '#3a2a00');   // deep shadow
+metalGrad.append('stop').attr('offset', '18%').attr('stop-color', '#b8860b');   // dark gold
+metalGrad.append('stop').attr('offset', '38%').attr('stop-color', '#ffd700');   // gold
+metalGrad.append('stop').attr('offset', '52%').attr('stop-color', '#fffacd');   // bright highlight streak
+metalGrad.append('stop').attr('offset', '62%').attr('stop-color', '#ffd700');   // gold return
+metalGrad.append('stop').attr('offset', '80%').attr('stop-color', '#b8860b');   // dark gold
+metalGrad.append('stop').attr('offset','100%').attr('stop-color', '#3a2a00');   // deep shadow
+
+// Specular highlight filter — a soft blur applied to a white overlay
+// to simulate the bright sheen catching light on a curved metal surface
+const specFilter = defs.append('filter')
+  .attr('id', 'crescent-spec')
+  .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
+specFilter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'blur');
+const feMerge = specFilter.append('feMerge');
+feMerge.append('feMergeNode').attr('in', 'blur');
+feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+// ─────────────────────────────────────────────────────────────────────────────
+
+const staticFilter = defs.append('filter')
+  .attr('id', 'tvStatic')
+  .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
+  
+staticFilter.append('feTurbulence')
+  .attr('id', 'noiseGen')
+  .attr('type', 'fractalNoise')
+  .attr('baseFrequency', '0.9')
+  .attr('numOctaves', '3')
+  .attr('seed', '0')
+  .attr('result', 'noise');
+
+staticFilter.append('feDisplacementMap')
+  .attr('id', 'glitchDisplacement')
+  .attr('in', 'SourceGraphic')
+  .attr('in2', 'noise')
+  .attr('scale', '0')
+  .attr('xChannelSelector', 'R')
+  .attr('yChannelSelector', 'G');
+
+const LG = mapLayer.append('g');
+const NG = mapLayer.append('g');
+
+let tipTimeout;
+const tipEl = document.getElementById('tip');
+tipEl.addEventListener('mouseenter', () => clearTimeout(tipTimeout));
+tipEl.addEventListener('mouseleave', () => hideTip());
+
+function showTip(e, d){
+  clearTimeout(tipTimeout);
+  const c = bcolor(d);
+  let linkHtml = '';
+  let imgHtml = '';
+
+  if (d.id !== 'root') {
+    // Pull directly from our Supabase horse_pics bucket.
+    // The scraper saved files as .jpg or .png based on magic bytes,
+    // so we try .jpg first and fall back to .png if it 404s.
+    const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
+    const jpgUrl = `${sbBase}/${d.id}.jpg`;
+    const pngUrl = `${sbBase}/${d.id}.png`;
+
+    imgHtml = `
+      <div style="margin-bottom:10px;border-radius:8px;overflow:hidden;display:flex;
+                  justify-content:center;align-items:center;background:rgba(0,0,0,0.6);
+                  box-shadow:inset 0 0 12px rgba(0,0,0,0.9);min-height:80px;">
+        <img src="${jpgUrl}"
+             onerror="if(this.getAttribute('data-tried-png')!=='1'){this.setAttribute('data-tried-png','1');this.src='${pngUrl}';}else{this.parentElement.style.display='none';}"
+             style="max-width:200px;max-height:150px;width:auto;height:auto;
+                    object-fit:contain;display:block;border-radius:4px;" />
+      </div>
+    `;
+
+    linkHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);">
+      <a href="https://db.netkeiba.com/horse/${d.id}" target="_blank"
+         style="color:#00ffcc;text-decoration:none;font-size:11px;font-family:monospace;text-shadow:0 0 5px rgba(0,255,204,0.5);">
+        View on Netkeiba ↗
+      </a></div>`;
+  }
+
+  tipEl.innerHTML =
+    imgHtml +
+    `<div style="font-weight:700;color:${c};font-size:15px;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.name}</div>` +
+    (d.data.g1 ? `<div style="color:${c};font-size:22px;font-family:monospace;line-height:1;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.g1} G1</div>` : '') +
+    (d.data.era ? `<div style="color:#8888aa;font-size:12px">${d.data.era}</div>` : '') +
+    (d._children && d.id !== 'root' ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
+    linkHtml;
+
+  tipEl.style.opacity = '1';
+  tipEl.style.left = (e.clientX + 15) + 'px';
+  
+  if (e.clientY > window.innerHeight - 250) {
+    tipEl.style.top = (e.clientY - tipEl.offsetHeight - 15) + 'px';
+  } else {
+    tipEl.style.top = (e.clientY + 15) + 'px';
+  }
+}
+
+function hideTip(){
+  tipTimeout = setTimeout(() => {
+    tipEl.style.opacity = '0';
+    setTimeout(() => { if (tipEl.style.opacity === '0') tipEl.style.left = '-9999px'; }, 200);
+  }, 250);
+}
+
+function linkPath(s, t) {
+  const mx  = (s.cartX + t.cartX) / 2;
+  const my  = (s.cartY + t.cartY) / 2;
+  const dx  = t.cartX - s.cartX;
+  const dy  = t.cartY - s.cartY;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  let bow = len * 0.08;
+
+  if (isSpectrumOn) {
+    const segments = 14;
+    let path = `M${s.cartX},${s.cartY}`;
+    const phase = globalTime * 0.005 * spectrumSpeed;
+    const angle = Math.atan2(dy, dx);
+    const freq = 3;
+    let audioAmp = 0;
+    
+    if (isAudioPlaying && dataArray) {
+        let safeDepth = Math.max(1, maxDepth);
+        let binIndex = Math.floor((s.depth / safeDepth) * (dataArray.length * 0.6));
+        binIndex = Math.min(binIndex, dataArray.length - 1);
+        let freqVal = dataArray[binIndex] || 0;
+        audioAmp = (freqVal / 255) * 20; 
+    }
+
+    const amp = 12 + audioAmp;
+
+    for (let i = 1; i <= segments; i++) {
+      const pct = i / segments;
+      const cx_ctrl = mx - dy/len*bow;
+      const cy_ctrl = my + dx/len*bow;
+
+      const omt = 1 - pct;
+      const baseX = omt * omt * s.cartX + 2 * omt * pct * cx_ctrl + pct * pct * t.cartX;
+      const baseY = omt * omt * s.cartY + 2 * omt * pct * cy_ctrl + pct * pct * t.cartY;
+
+      const edgeTaper = Math.sin(pct * Math.PI);
+      const waveOffset = Math.sin(pct * freq * Math.PI * 2 - phase) * amp * edgeTaper;
+
+      const perpX = -Math.sin(angle) * waveOffset;
+      const perpY = Math.cos(angle) * waveOffset;
+
+      path += ` L${baseX + perpX},${baseY + perpY}`;
+    }
+    return path;
+  }
+
+  if (isWobbleOn) {
+    const phase = s.depth;
+    const wobble = Math.sin(globalTime * 0.005 * wobbleSpeed - phase) * 20;
+    bow += wobble;
+  }
+
+  return `M${s.cartX},${s.cartY}Q${mx - dy/len*bow},${my + dx/len*bow} ${t.cartX},${t.cartY}`;
+}
+
+function redrawLinksFast() {
+  LG.selectAll('path').attr('d', d => linkPath(d.source, d.target));
+}
+
+let isDragging = false;
+
+function update(source) {
+  if (!root) return;
+  const tree = d3.tree().size([2 * Math.PI, 680]);
+  tree(root);
+
+  const nodes = root.descendants();
+  const links = root.links();
+
+  nodes.forEach(d => {
+    d.y = RADII[Math.min(d.depth, RADII.length - 1)] * spreadFactor;
+    if (d.data.ox != null) {
+      d.cartX = d.data.ox;
+      d.cartY = d.data.oy;
+    } else {
+      d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2);
+      d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2);
+    }
+  });
+
+  const nd = NG.selectAll('g.nd').data(nodes, d => d.id);
+
+  const drag = d3.drag()
+    .subject((e, d) => ({ x: d.cartX, y: d.cartY }))
+    .on('start', (e, d) => { 
+      isDragging = false; 
+      e.sourceEvent.stopPropagation(); 
+      if (isFloatOn && floatSim) floatSim.alphaTarget(0.3).restart();
+    })
+    .on('drag',  (e, d) => {
+      isDragging = true;
+      if (is3DOn) {
+        // Repositioning individual nodes makes no sense once they're projected;
+        // use the drag to orbit the camera instead.
+        const mx = e.sourceEvent.movementX || 0;
+        const my = e.sourceEvent.movementY || 0;
+        yaw3d   += mx * 0.01;
+        pitch3d += my * 0.01;
+        pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
+        const ts = document.getElementById('tiltSlider');
+        if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+        return;
+      }
+      d.data.ox = e.x; d.data.oy = e.y;
+      d.cartX = e.x;   d.cartY = e.y;
+      
+      if (isFloatOn) {
+        d.fx = e.x;
+        d.fy = e.y;
+      } else {
+        d3.select(NG.selectAll('g.nd').filter(n => n.id === d.id).node())
+          .attr('transform', `translate(${d.cartX},${d.cartY})`);
+        redrawLinksFast();
+      }
+    })
+    .on('end', (e, d) => {
+      if (is3DOn) {
+        if (!isDragging && d._children) {
+          d.children = d.children ? null : d._children;
+          update(d);
+        }
+        return;
+      }
+      if (isFloatOn) {
+        d.fx = null;
+        d.fy = null;
+        if (floatSim) floatSim.alphaTarget(0);
+      }
+      if (!isDragging && d._children) {
+        d.children = d.children ? null : d._children;
+        d.data.ox = null; d.data.oy = null;
+        update(d);
+      }
+    });
+
+  const enter = nd.enter().append('g').attr('class', 'nd')
+    .attr('transform', d => `translate(${source.cartX0 || cx},${source.cartY0 || cy})`)
+    .call(drag)
+    .on('mouseover', (e, d) => {
+      showTip(e, d);
+      if (d.id === 'root') {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('transform', 'scale(1.2)');
+      } else {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('r', nodeR(d) * 1.3);
+      }
+    })
+    .on('mouseout', (e, d) => {
+      hideTip();
+      if (d.id === 'root') {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(250).attr('transform', 'scale(1)');
+      } else {
+          d3.select(e.currentTarget).select('.main-node').transition().duration(250).attr('r', nodeR(d));
+      }
+    })
+    .attr('opacity', 0);
+
+  const inner = enter.append('g').attr('class', 'node-inner');
+
+  inner.append('circle')
+    .attr('class', 'aura')
+    .attr('r', d => nodeR(d) * 4.5)
+    .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
+    .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null)
+    .attr('opacity', 0)
+    .style('pointer-events', 'none');
+
+  inner.filter(d => d.id === 'root')
+    .append('g')
+    .attr('class', 'ripple-group')
+    .style('pointer-events', 'none');
+
+  inner.filter(d => d.id === 'root')
+    .append('path')
+    .attr('class', 'main-node')
+    .attr('d', d => getStarPath(0, 0, 7, nodeR(d) * 1.4, nodeR(d) * 0.6))
+    .attr('fill', d => bcolor(d))
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5);
+
+  inner.filter(d => d.id !== 'root')
+    .append('circle')
+    .attr('class', 'main-node')
+    .attr('r', d => nodeR(d))
+    .attr('fill', d => (d.data.g1 > 0) ? bcolor(d) : '#1a1a26')
+    .attr('stroke', d => bcolor(d));
+
+  // ── Horse photos on nodes ─────────────────────────────────────────────────
+  // Only show on G1 winners (they have big enough nodes to be worth it).
+  // Each node gets its own <clipPath> so the photo is cropped to a circle.
+  inner.filter(d => d.id !== 'root')
+    .each(function(d) {
+      const r   = nodeR(d);
+      const cid = `img-clip-${d.id}`;
+
+      // Register the clip path in <defs> (guard against duplicates on re-render)
+      if (defs.select('#' + cid).empty()) {
+        defs.append('clipPath').attr('id', cid)
+          .append('circle').attr('r', r - 1.5); // slight inset so the colored stroke shows
+      }
+
+      const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
+      const jpgUrl = `${sbBase}/${d.id}.jpg`;
+      const pngUrl = `${sbBase}/${d.id}.png`;
+
+      const img = d3.select(this).append('image')
+        .attr('class', 'horse-photo')
+        .attr('href', jpgUrl)
+        .attr('x', -r + 1.5).attr('y', -r + 1.5)
+        .attr('width', (r - 1.5) * 2).attr('height', (r - 1.5) * 2)
+        .attr('clip-path', `url(#${cid})`)
+        .attr('preserveAspectRatio', 'xMidYMid slice')
+        .style('pointer-events', 'none');
+
+      // jpg → png → hide fallback chain
+      img.node().onerror = function() {
+        if (this.getAttribute('href') === jpgUrl) {
+          this.setAttribute('href', pngUrl);
+        } else {
+          this.style.display = 'none';
+        }
+      };
+
+      // Colored stroke ring rendered on top of the photo
+      d3.select(this).append('circle')
+        .attr('class', 'photo-ring')
+        .attr('r', r)
+        .attr('fill', 'none')
+        .attr('stroke', bcolor(d))
+        .attr('stroke-width', 2)
+        .style('pointer-events', 'none');
+    });
+  // ─────────────────────────────────────────────────────────────────────────
+
+  inner.filter(d => d.id !== 'root')
+    .append('text').text(d => d.data.name)
+    .attr('dy', d => nodeR(d) + 16).attr('text-anchor', 'middle')
+    .attr('font-size', d => (d.data.g1 >= 5 ? '13px' : '11px'))
+    .attr('font-weight', d => (d.data.g1 >= 5 ? '800' : '600'))
+    .attr('fill', d => (d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)'))
+    .attr('pointer-events', 'none')
+    .style('text-shadow', d => d.data.g1 > 0 ? `0 0 10px ${bcolor(d)}` : 'none');
+
+  inner.filter(d => d.data.g1 >= 2).append('text')
+    .text(d => d.data.g1 + 'G1')
+    .attr('dy', d => -nodeR(d) - 8).attr('text-anchor', 'middle')
+    .attr('font-size', '11px').attr('font-family', 'monospace').attr('font-weight', '800')
+    .attr('fill', '#fff')
+    .attr('pointer-events', 'none')
+    .style('text-shadow', d => `0 0 8px ${bcolor(d)}, 0 0 15px ${bcolor(d)}`);
+
+  inner.filter(d => d._children && d.id !== 'root').append('text')
+    .attr('class', 'pm')
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+    .attr('font-size', '14px').attr('font-weight', 'bold')
+    .attr('fill', d => bcolor(d)).attr('fill-opacity', 0.8)
+    .attr('pointer-events', 'none')
+    .text(d => d.children ? '-' : '+');
+
+  const updateNodes = enter.merge(nd);
+  updateNodes.transition().duration(400)
+    .attr('transform', d => `translate(${d.cartX},${d.cartY})`)
+    .attr('opacity', 1);
+  updateNodes.select('text.pm').text(d => d.children ? '-' : '+');
+
+  nd.exit().transition().duration(400)
+    .attr('transform', d => `translate(${source.cartX},${source.cartY})`)
+    .attr('opacity', 0).remove();
+
+  const lk = LG.selectAll('path').data(links, d => d.source.id + '-' + d.target.id);
+  
+  lk.enter().append('path')
+    .attr('fill', 'none')
+    .attr('stroke', d => bcolor(d.target))
+    .attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5)
+    .attr('stroke-opacity', 0)
+    .attr('d', d => {
+      const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy, depth: 0 };
+      return linkPath(o, o);
+    })
+    .merge(lk)
+    .transition().duration(400)
+    .attr('d', d => linkPath(d.source, d.target));
+
+  lk.exit().transition().duration(400)
+    .attr('stroke-opacity', 0)
+    .attr('d', d => {
+      const o = { cartX: source.cartX, cartY: source.cartY, depth: 0 };
+      return linkPath(o, o);
+    }).remove();
+
+  nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
+
+  if (glowMode === 'manual') applyStaticGlow(manualGlowVal);
+
+  if (isFloatOn && floatSim) {
+    const currentNodes = root.descendants();
+    floatSim.nodes(currentNodes);
+    currentNodes.forEach(d => {
+      if (d.x === undefined || isNaN(d.x)) {
+         d.x = source.cartX0 || cx; 
+         d.y = source.cartY0 || cy;
+         d.vx = 0; d.vy = 0;
+      }
+    });
+    floatSim.alpha(0.5).restart();
+  }
+}
+
+function traverseAll(node, callback) {
+  callback(node);
+  if (node._children) node._children.forEach(c => traverseAll(c, callback));
+}
+
+function resetTree(){
+  if (!root) return;
+  const slider = document.getElementById('levelSlider');
+  slider.value = 1;
+  onLevelSlide(1);
+
+  isSpinOn = false;
+  mapAngle = 0;
+  
+  const spinBtn = document.getElementById('spinBtn');
+  spinBtn.textContent = 'OFF';
+  spinBtn.style.color = '';
+  spinBtn.style.borderColor = '';
+  
+  d3.select('#mapLayer').transition().duration(600).attr('transform', `rotate(0, ${cx}, ${cy})`);
+  
+  svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.3).translate(-W/2, -H/2));
+}
+
+async function fetchData() {
+  const welcome = document.getElementById('welcome');
+  welcome.style.display = 'block';
+  welcome.innerHTML = 'Fetching data from Supabase...<br>Hang tight.';
+
+  const { data: raw, error } = await db.from('pedigrees').select('*');
+
+  if (error) {
+    console.error(error);
+    welcome.innerHTML = 'Well, that failed. Check your console.';
+    return;
+  }
+
+  welcome.style.display = 'none';
+
+  if (!raw || raw.length === 0) {
+    alert('No data found in the pedigrees table.');
+    return;
+  }
+
+  try {
+    const nodes    = {};
+    const g1Counts = {};
+    const eras     = {};
+
+    raw.forEach(d => {
+      const hId = d.horse_id;
+      if (!hId) return;
+      g1Counts[hId] = (g1Counts[hId] || 0) + 1;
+      if (d.race_date) {
+        const year = parseInt(d.race_date.split('-')[0]);
+        if (!eras[hId]) eras[hId] = { min: year, max: year };
+        else { eras[hId].min = Math.min(eras[hId].min, year); eras[hId].max = Math.max(eras[hId].max, year); }
+      }
+    });
+
+    raw.forEach(d => {
+      const hId  = d.horse_id     ? String(d.horse_id).trim()     : null;
+      const sId  = d.sire_id      && d.sire_id      !== 'nan' ? String(d.sire_id).trim()      : null;
+      const ssId = d.sire_sire_id && d.sire_sire_id !== 'nan' ? String(d.sire_sire_id).trim() : null;
+
+      if (ssId && !nodes[ssId])
+        nodes[ssId] = { id: ssId, pid: null, name: d.sire_sire_name?.trim() || 'Unknown', g1: 0, era: '' };
+
+      if (sId) {
+        if (!nodes[sId]) nodes[sId] = { id: sId, pid: ssId || null, name: d.sire_name?.trim() || 'Unknown', g1: 0, era: '' };
+        else if (!nodes[sId].pid && ssId) nodes[sId].pid = ssId;
+      }
+
+      if (hId) {
+        const eraObj = eras[hId];
+        const eraStr = eraObj
+          ? (eraObj.min === eraObj.max ? `${eraObj.min}` : `${eraObj.min}-${eraObj.max}`)
+          : '';
+        if (!nodes[hId]) {
+          nodes[hId] = { id: hId, pid: sId || null, name: d.horse_name?.trim() || 'Unknown', g1: g1Counts[hId], era: eraStr };
+        } else {
+          nodes[hId].era = eraStr;
+          nodes[hId].g1  = g1Counts[hId];
+          if (!nodes[hId].pid && sId) nodes[hId].pid = sId;
+        }
+      }
+    });
+
+    const flatData = [{ id: 'root', pid: '', name: 'All Thoroughbreds', g1: 0, era: 'Origin' }];
+    Object.values(nodes).forEach(n => {
+      if (!n.pid || n.pid === n.id) n.pid = 'root';
+      flatData.push(n);
+    });
+
+    const stratify = d3.stratify().id(d => d.id).parentId(d => d.pid || null);
+    root = stratify(flatData);
+
+    root.each(d => { d._children = d.children; d.data.ox = null; d.data.oy = null; });
+    
+    maxDepth = 0;
+    root.each(d => { if (d.depth > maxDepth) maxDepth = d.depth; });
+    
+    traverseAll(root, d => { if (d.id !== 'root') d.children = null; });
+
+    const slider = document.getElementById('levelSlider');
+    slider.max   = maxDepth;
+    slider.value = 1;
+    document.getElementById('levelVal').textContent = '1 / ' + maxDepth;
+
+    buildRankPanel(nodes);
+
+    root.cartX0 = cx; root.cartY0 = cy;
+    update(root);
+
+    svg.transition().duration(750)
+       .call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.3).translate(-W/2, -H/2));
+
+    document.getElementById('welcome').style.display = 'block';
+    document.getElementById('welcome').innerHTML = 'Data Loaded.<br>Drag an MP3 or Listen to Tab to play audio.';
+    setTimeout(() => { document.getElementById('welcome').style.display = 'none'; }, 4000);
+
+  } catch (err) {
+    alert('Error parsing database data. Check the console for details.');
+    console.error(err);
+  }
+}
+
+fetchData();
+</script>
+</body>
+</html>
