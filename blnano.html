@@ -1154,7 +1154,7 @@ function update(source) {
   // ── Horse photos on nodes ─────────────────────────────────────────────────
   // Only show on G1 winners (they have big enough nodes to be worth it).
   // Each node gets its own <clipPath> so the photo is cropped to a circle.
-  inner.filter(d => d.id !== 'root' && d.data.g1 > 0)
+  inner.filter(d => d.id !== 'root')
     .each(function(d) {
       const r   = nodeR(d);
       const cid = `img-clip-${d.id}`;
