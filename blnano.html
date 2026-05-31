@@ -934,9 +934,9 @@ function showTip(e, d){
   let imgHtml = '';
 
   if (d.id !== 'root') {
-    // Route the URL through a proxy to smash through Netkeiba's hotlink protection
-    const targetUrl = `https://db.netkeiba.com/show_photo.php?horse_id=${d.id}&tn=yes`;
-    const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(targetUrl)}`;
+    // Aim the proxy directly at the static CDN image instead of the PHP script
+    const cdnUrl = `https://cdn.netkeiba.com/img.db/horse/${d.id}/${d.id}_1.jpg`;
+    const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(cdnUrl)}`;
 
     imgHtml = `
       <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; display:flex; justify-content:center; background:rgba(0,0,0,0.5); box-shadow:inset 0 0 10px rgba(0,0,0,0.8);">
