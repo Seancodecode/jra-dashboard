@@ -222,22 +222,23 @@
         <button class="btn" id="povBtn" onclick="togglePOV()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
 
-      <!-- Orbit-only controls -->
-      <div id="orbitControls">
+      <!-- Tilt: orbit camera only -->
+      <div id="tiltControls">
         <div class="ctrl-row">
           <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
           <span class="ctrl-val" id="tiltVal">32°</span>
         </div>
         <input type="range" id="tiltSlider" min="-1.4" max="1.4" step="0.01" value="0.55"
                oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
-
-        <div class="ctrl-row">
-          <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Spin</span>
-          <span class="ctrl-val" id="spin3dVal">0.0x</span>
-        </div>
-        <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0"
-               oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
       </div>
+
+      <!-- Spin: tilts the disc in orbit mode, orbits the world around you in POV -->
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="spinLabel">3D Spin</span>
+        <span class="ctrl-val" id="spin3dVal">0.0x</span>
+      </div>
+      <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0"
+             oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
 
       <div class="ctrl-row">
         <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="bulgeLabel">Bulge</span>
@@ -250,7 +251,7 @@
         DRAG TO ORBIT · SCROLL TO ZOOM
       </div>
       <div id="povHint" style="display:none;font-size:8px;color:#00ffcc;font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;line-height:1.7;">
-        W/A/S/D OR DRAG TO LOOK<br>BULGE = ELEVATION · SCROLL = ZOOM
+        STANDING ON THE STAR<br>W/A/S/D OR DRAG TO LOOK<br>SPIN = ORBIT · BULGE = ELEVATION
       </div>
     </div>
   </div>
@@ -310,10 +311,11 @@ let focal3d       = 820;
 let orbit3d       = false;
 let lastPX        = 0, lastPY = 0;
 
-// POV / stargaze (first-person from the center) state
+// POV / stargaze (first-person, standing on the central star) state
 let povMode       = false;
 let lookYaw       = 0;
-let lookPitch     = 0.7;     // start tilted up toward the "sky"
+let lookPitch     = 0.15;    // look slightly down at the plane around you
+let povSpin       = 0;       // world rotation — the tree orbits around you
 const keys        = {};      // WASD / arrow keys currently held
 
 // Audio-reactive camera shake state (applies to both 2D and 3D)
@@ -671,9 +673,10 @@ d3.timer(elapsed => {
       const ls = 0.035;
       if (keys['a'] || keys['arrowleft'])  lookYaw   -= ls;
       if (keys['d'] || keys['arrowright']) lookYaw   += ls;
-      if (keys['w'] || keys['arrowup'])    lookPitch += ls;
-      if (keys['s'] || keys['arrowdown'])  lookPitch -= ls;
+      if (keys['w'] || keys['arrowup'])    lookPitch -= ls;   // look up
+      if (keys['s'] || keys['arrowdown'])  lookPitch += ls;   // look down
       lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch));
+      povSpin += spin3dSpeed * 0.01;     // the tree wheels around you
     } else if (!orbit3d) {
       yaw3d += spin3dSpeed * 0.01;
     }
@@ -869,8 +872,7 @@ function setSpin3D(v){
 }
 function setBulge3D(v){
   bulge3d = parseFloat(v);
-  document.getElementById('bulge3dVal').textContent =
-    povMode ? (Math.round(bulge3d) - 200) : Math.round(bulge3d);
+  document.getElementById('bulge3dVal').textContent = Math.round(bulge3d);
 }
 
 function toggleShake(){
@@ -892,23 +894,29 @@ function toggleShake(){
 function togglePOV(){
   povMode = !povMode;
   const btn = document.getElementById('povBtn');
-  document.getElementById('orbitControls').style.display = povMode ? 'none' : 'block';
-  document.getElementById('orbitHint').style.display     = povMode ? 'none' : 'block';
-  document.getElementById('povHint').style.display       = povMode ? 'block' : 'none';
-  document.getElementById('bulgeLabel').textContent      = povMode ? 'Elevation' : 'Bulge';
+  document.getElementById('tiltControls').style.display = povMode ? 'none' : 'block';
+  document.getElementById('orbitHint').style.display    = povMode ? 'none' : 'block';
+  document.getElementById('povHint').style.display      = povMode ? 'block' : 'none';
+  document.getElementById('bulgeLabel').textContent     = povMode ? 'Elevation' : 'Bulge';
+  document.getElementById('spinLabel').textContent      = povMode ? 'Orbit Speed' : '3D Spin';
   setBulge3D(bulge3d);
 
+  const spinSlider = document.getElementById('spin3dSlider');
   if (povMode) {
     btn.textContent = 'ON';
     btn.style.color = '#00ffcc';
     btn.style.borderColor = '#00ffcc';
     btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
-    lookYaw = 0; lookPitch = 0.7;     // face up into the sky
+    lookYaw = 0; lookPitch = 0.15;
+    // The whole point of POV is watching the tree wheel around you, so give it a
+    // gentle default orbit (orbit-galaxy mode still stays still by default).
+    if (parseFloat(spinSlider.value) === 0) { spinSlider.value = 0.5; setSpin3D(0.5); }
   } else {
     btn.textContent = 'OFF';
     btn.style.color = '';
     btn.style.borderColor = '';
     btn.style.boxShadow = 'none';
+    spinSlider.value = 0; setSpin3D(0);
   }
   if (is3DOn) project3D();
 }
@@ -999,28 +1007,26 @@ function projectOrbit(nodes, maxR){
   redrawLinksFast();
 }
 
-// First-person POV: stand at the center, stars on a dome overhead.
-// Root (smallest radius) sits at the zenith; descendants fan toward the horizon.
+// First-person POV: you stand on the central star. The rest of the tree is laid
+// out on the plane around you and wheels about you (spin). Bulge raises your eye.
+// Root sits at your feet (origin); descendants ring outward and recede to a horizon.
 function projectPOV(nodes, maxR){
-  const DOME_R = 1100;
-  const focal  = 950;
-  const near   = 40;
-  const camY   = (bulge3d - 200) * 1.6; // Bulge slider = your elevation
+  const focal = 900;
+  const near  = 25;
+  const camEye = 40 + bulge3d * 0.7;     // Bulge slider = how high you stand
 
   const cyaw = Math.cos(lookYaw),   syaw = Math.sin(lookYaw);
   const cpit = Math.cos(lookPitch), spit = Math.sin(lookPitch);
 
   nodes.forEach(d => {
-    // Place node on a hemisphere dome.
-    const elev  = (1 - d.y / maxR) * (Math.PI / 2); // zenith → horizon
-    const az    = d.x;
-    const horiz = Math.cos(elev) * DOME_R;
-    const wx = horiz * Math.cos(az);
-    const wz = horiz * Math.sin(az);
-    const wy = Math.sin(elev) * DOME_R;
+    // World position: same radial layout, on a (mostly flat) plane around you.
+    const az = d.x + povSpin;
+    const wx = d.y * Math.cos(az);
+    const wz = d.y * Math.sin(az);
+    const wy = (1 - d.y / maxR) * 60;      // gentle bowl so it's not dead flat
 
-    // World → camera (camera at center, raised by camY).
-    const relx = wx, rely = wy - camY, relz = wz;
+    // World → camera (camera at center, raised by camEye, looking yaw/pitch).
+    const relx = wx, rely = wy - camEye, relz = wz;
     const x1 =  cyaw * relx - syaw * relz;
     const z1 =  syaw * relx + cyaw * relz;
     const y1 =  rely;
@@ -1031,23 +1037,21 @@ function projectPOV(nodes, maxR){
     if (z2 > near) {
       const persp = focal / z2;
       d.cartX  = cx + x2 * persp;
-      d.cartY  = cy - y2 * persp;     // world up → screen up
+      d.cartY  = cy - y2 * persp;          // world up → screen up
       d._z3    = z2;
-      d._persp = Math.min(2.6, Math.max(0.12, persp * (DOME_R / focal)));
+      d._persp = Math.min(3, Math.max(0.1, persp));
       d._vis3  = true;
     } else {
-      d._vis3  = false;               // behind the viewer — cull
+      d._vis3  = false;                    // behind you — cull
       d._z3    = z2;
-      d.cartX  = NaN;                 // invalid transform/path → not rendered
-      d.cartY  = NaN;
-      d._persp = 0;
+      d.cartX  = NaN; d.cartY = NaN; d._persp = 0;
     }
   });
 
   NG.selectAll('g.nd')
     .attr('transform', d => d._vis3 ? `translate(${d.cartX},${d.cartY}) scale(${d._persp})` : 'scale(0)')
-    .attr('opacity',   d => d._vis3 ? Math.min(1, 0.45 + (d._persp * 0.4)) : 0)
-    .sort((a, b) => a._z3 - b._z3);
+    .attr('opacity',   d => d._vis3 ? Math.min(1, 0.4 + d._persp * 0.35) : 0)
+    .sort((a, b) => a._z3 - b._z3);        // far first, near drawn on top
 
   redrawLinksFast();
 }
@@ -1212,7 +1216,7 @@ window.addEventListener('pointermove', e => {
   lastPX = e.clientX; lastPY = e.clientY;
   if (povMode) {
     lookYaw   += dx;
-    lookPitch -= dy;                                  // drag up → look up
+    lookPitch += dy;                                  // drag up → look up
     lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
   } else {
     yaw3d   += dx;
@@ -1462,7 +1466,7 @@ function update(source) {
         const my = (e.sourceEvent.movementY || 0) * 0.006;
         if (povMode) {
           lookYaw   += mx;
-          lookPitch -= my;
+          lookPitch += my;
           lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
         } else {
           yaw3d   += mx;
