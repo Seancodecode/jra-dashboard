@@ -934,18 +934,21 @@ function showTip(e, d){
   let imgHtml = '';
 
   if (d.id !== 'root') {
-    const cdnUrl = `https://cdn.netkeiba.com/img.db/horse/${d.id}/${d.id}_1.jpg`;
-    
-    // The "Go Stupid" Proxies: Hijacking Search Engine Image Caches
-    const ddgProxy = `https://external-content.duckduckgo.com/iu/?u=${encodeURIComponent(cdnUrl)}`;
-    const googleProxy = `https://images1-focus-opensocial.apps.googleusercontent.com/ig/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(cdnUrl)}`;
+    // Pull directly from our Supabase horse_pics bucket.
+    // The scraper saved files as .jpg or .png based on magic bytes,
+    // so we try .jpg first and fall back to .png if it 404s.
+    const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
+    const jpgUrl = `${sbBase}/${d.id}.jpg`;
+    const pngUrl = `${sbBase}/${d.id}.png`;
 
     imgHtml = `
-      <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; display:flex; justify-content:center; background:rgba(0,0,0,0.5); box-shadow:inset 0 0 10px rgba(0,0,0,0.8);">
-        <img src="${ddgProxy}"
-             referrerpolicy="no-referrer"
-             onerror="if(this.src === '${ddgProxy}') { this.src = '${googleProxy}'; } else { this.parentElement.style.display='none'; }"
-             style="max-width:200px; max-height:140px; width:auto; height:auto; object-fit:contain; display:block;" />
+      <div style="margin-bottom:10px;border-radius:8px;overflow:hidden;display:flex;
+                  justify-content:center;align-items:center;background:rgba(0,0,0,0.6);
+                  box-shadow:inset 0 0 12px rgba(0,0,0,0.9);min-height:80px;">
+        <img src="${jpgUrl}"
+             onerror="if(this.getAttribute('data-tried-png')!=='1'){this.setAttribute('data-tried-png','1');this.src='${pngUrl}';}else{this.parentElement.style.display='none';}"
+             style="max-width:200px;max-height:150px;width:auto;height:auto;
+                    object-fit:contain;display:block;border-radius:4px;" />
       </div>
     `;
 
@@ -1147,6 +1150,53 @@ function update(source) {
     .attr('r', d => nodeR(d))
     .attr('fill', d => (d.data.g1 > 0) ? bcolor(d) : '#1a1a26')
     .attr('stroke', d => bcolor(d));
+
+  // ── Horse photos on nodes ─────────────────────────────────────────────────
+  // Only show on G1 winners (they have big enough nodes to be worth it).
+  // Each node gets its own <clipPath> so the photo is cropped to a circle.
+  inner.filter(d => d.id !== 'root' && d.data.g1 > 0)
+    .each(function(d) {
+      const r   = nodeR(d);
+      const cid = `img-clip-${d.id}`;
+
+      // Register the clip path in <defs> (guard against duplicates on re-render)
+      if (defs.select('#' + cid).empty()) {
+        defs.append('clipPath').attr('id', cid)
+          .append('circle').attr('r', r - 1.5); // slight inset so the colored stroke shows
+      }
+
+      const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
+      const jpgUrl = `${sbBase}/${d.id}.jpg`;
+      const pngUrl = `${sbBase}/${d.id}.png`;
+
+      const img = d3.select(this).append('image')
+        .attr('class', 'horse-photo')
+        .attr('href', jpgUrl)
+        .attr('x', -r + 1.5).attr('y', -r + 1.5)
+        .attr('width', (r - 1.5) * 2).attr('height', (r - 1.5) * 2)
+        .attr('clip-path', `url(#${cid})`)
+        .attr('preserveAspectRatio', 'xMidYMid slice')
+        .style('pointer-events', 'none');
+
+      // jpg → png → hide fallback chain
+      img.node().onerror = function() {
+        if (this.getAttribute('href') === jpgUrl) {
+          this.setAttribute('href', pngUrl);
+        } else {
+          this.style.display = 'none';
+        }
+      };
+
+      // Colored stroke ring rendered on top of the photo
+      d3.select(this).append('circle')
+        .attr('class', 'photo-ring')
+        .attr('r', r)
+        .attr('fill', 'none')
+        .attr('stroke', bcolor(d))
+        .attr('stroke-width', 2)
+        .style('pointer-events', 'none');
+    });
+  // ─────────────────────────────────────────────────────────────────────────
 
   inner.filter(d => d.id !== 'root')
     .append('text').text(d => d.data.name)
