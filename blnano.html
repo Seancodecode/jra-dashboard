@@ -899,6 +899,33 @@ allColors.forEach(c => {
   grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
 });
 
+// ── Metallic crescent gradient ────────────────────────────────────────────────
+// Linear gradient angled at ~45° — bright highlight streak across the gold,
+// with deep shadow at the edges to sell the 3D metallic look.
+const metalGrad = defs.append('linearGradient')
+  .attr('id', 'metallic-crescent')
+  .attr('x1', '0%').attr('y1', '0%')
+  .attr('x2', '100%').attr('y2', '100%');
+
+metalGrad.append('stop').attr('offset',  '0%').attr('stop-color', '#3a2a00');   // deep shadow
+metalGrad.append('stop').attr('offset', '18%').attr('stop-color', '#b8860b');   // dark gold
+metalGrad.append('stop').attr('offset', '38%').attr('stop-color', '#ffd700');   // gold
+metalGrad.append('stop').attr('offset', '52%').attr('stop-color', '#fffacd');   // bright highlight streak
+metalGrad.append('stop').attr('offset', '62%').attr('stop-color', '#ffd700');   // gold return
+metalGrad.append('stop').attr('offset', '80%').attr('stop-color', '#b8860b');   // dark gold
+metalGrad.append('stop').attr('offset','100%').attr('stop-color', '#3a2a00');   // deep shadow
+
+// Specular highlight filter — a soft blur applied to a white overlay
+// to simulate the bright sheen catching light on a curved metal surface
+const specFilter = defs.append('filter')
+  .attr('id', 'crescent-spec')
+  .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
+specFilter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'blur');
+const feMerge = specFilter.append('feMerge');
+feMerge.append('feMergeNode').attr('in', 'blur');
+feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+// ─────────────────────────────────────────────────────────────────────────────
+
 const staticFilter = defs.append('filter')
   .attr('id', 'tvStatic')
   .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
@@ -1123,17 +1150,7 @@ function update(source) {
 
   const inner = enter.append('g').attr('class', 'node-inner');
 
-  // Aura: ellipse for root, circle for everyone else
-  inner.filter(d => d.id === 'root').append('ellipse')
-    .attr('class', 'aura')
-    .attr('rx', d => nodeR(d) * 2.2 * 3.5)
-    .attr('ry', d => nodeR(d) * 1.1 * 3.5)
-    .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
-    .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null)
-    .attr('opacity', 0)
-    .style('pointer-events', 'none');
-
-  inner.filter(d => d.id !== 'root').append('circle')
+  inner.append('circle')
     .attr('class', 'aura')
     .attr('r', d => nodeR(d) * 4.5)
     .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
@@ -1146,16 +1163,109 @@ function update(source) {
     .attr('class', 'ripple-group')
     .style('pointer-events', 'none');
 
-  // "Eclipse first, the rest nowhere" — the root is an ellipse, not a star.
-  inner.filter(d => d.id === 'root')
-    .append('ellipse')
-    .attr('class', 'main-node')
-    .attr('rx', d => nodeR(d) * 2.2)   // wide axis — like a racing oval
-    .attr('ry', d => nodeR(d) * 1.1)   // shorter vertical
-    .attr('fill', d => bcolor(d))
-    .attr('stroke', '#fff')
-    .attr('stroke-width', 2)
-    .attr('filter', 'url(#tvStatic)'); // keep the glow filter
+  // "Eclipse first, the rest nowhere" — crescent moon at the root.
+  // Built as two overlapping circles subtracted via clip: a filled outer circle
+  // with an offset inner circle punched out of it using a clipPath mask.
+  inner.filter(d => d.id === 'root').each(function(d) {
+    const r   = nodeR(d);
+    const cid = `crescent-clip-root`;
+
+    if (defs.select('#' + cid).empty()) {
+      // The clip region is the outer circle minus a slightly smaller offset circle
+      const cp = defs.append('clipPath').attr('id', cid);
+      cp.append('circle').attr('r', r * 1.6);                         // outer boundary
+      cp.append('circle').attr('cx', r * 0.9).attr('r', r * 1.35)    // punch-out offset circle
+        .attr('fill', 'black')
+        .style('mix-blend-mode', 'destination-out');
+    }
+
+    const g2 = d3.select(this);
+
+    // Glow halo behind the crescent
+    g2.append('circle')
+      .attr('class', 'crescent-glow')
+      .attr('r', r * 1.6)
+      .attr('fill', bcolor(d))
+      .attr('opacity', 0.18)
+      .attr('filter', 'url(#tvStatic)')
+      .style('pointer-events', 'none');
+
+    // The crescent: use SVG path with arc commands — most reliable cross-browser
+    // A crescent is drawn as: outer arc (large) + inner arc (reverse) closing the shape
+    const R  = r * 1.55;   // outer radius
+    const ri = r * 1.25;   // inner (cutout) radius
+    const ox = r * 0.55;   // horizontal offset of the inner circle center
+
+    // Outer arc: full circle points at top/bottom
+    // Inner arc: offset circle, reversed
+    const crescentPath = [
+      `M 0,${-R}`,
+      `A ${R},${R} 0 1 1 0,${R}`,            // outer arc (left sweep, large-arc)
+      `A ${ri},${ri} 0 1 0 0,${-R}`,          // inner arc reversed (right sweep, large-arc) — but offset
+    ].join(' ');
+
+    // Proper crescent using two arcs with the inner circle shifted
+    const x1o = 0,    y1o = -R;
+    const x2o = 0,    y2o =  R;
+    const x1i = ox,   y1i = -R + (R - ri);
+    const x2i = ox,   y2i =  R - (R - ri);
+
+    // Clean parametric crescent path
+    const path = `
+      M ${-R * Math.sin(0.15)},${-R * Math.cos(0.15)}
+      A ${R},${R} 0 1,1 ${-R * Math.sin(0.15)},${R * Math.cos(0.15)}
+      A ${ri},${ri} 0 1,0 ${-R * Math.sin(0.15)},${-R * Math.cos(0.15)}
+      Z
+    `;
+
+    // Base crescent — metallic gradient fill
+    g2.append('path')
+      .attr('class', 'main-node')
+      .attr('d', buildCrescent(r))
+      .attr('fill', 'url(#metallic-crescent)')
+      .attr('stroke', '#fffde0')          // warm near-white edge
+      .attr('stroke-width', 1.5)
+      .attr('stroke-linejoin', 'round');
+
+    // Specular sheen layer — a slightly smaller, semi-transparent white path
+    // offset upward to look like light catching the top of the metal curve
+    g2.append('path')
+      .attr('d', buildCrescent(r * 0.72))
+      .attr('transform', `translate(${-r * 0.18}, ${-r * 0.22})`)
+      .attr('fill', 'rgba(255,255,220,0.18)')
+      .attr('stroke', 'none')
+      .attr('filter', 'url(#crescent-spec)')
+      .style('pointer-events', 'none');
+  });
+
+  function buildCrescent(r) {
+    const R  = r * 1.6;   // outer radius
+    const ri = r * 1.25;  // inner circle radius
+    const dx = r * 0.65;  // how far right the inner circle is shifted
+
+    // We trace: outer circle arc (almost full) then inner circle arc (reversed)
+    // using 4 points to avoid degenerate arcs at exact top/bottom
+    const a  = 0.12; // small angle offset from top/bottom to avoid SVG arc quirks
+    const sa = Math.sin(a), ca = Math.cos(a);
+
+    const ox1x = -R * sa,  ox1y = -R * ca;  // outer top
+    const ox2x =  R * sa,  ox2y =  R * ca;  // outer bottom (mirrored)
+
+    // Inner circle center is shifted right by dx
+    // Points on inner circle that align with outer circle's top/bottom
+    const iy1 = -R * ca;
+    const iy2 =  R * ca;
+    const ix1 = dx + Math.sqrt(Math.max(0, ri*ri - iy1*iy1));
+    const ix2 = dx + Math.sqrt(Math.max(0, ri*ri - iy2*iy2));
+
+    return [
+      `M ${ox1x},${ox1y}`,
+      `A ${R},${R} 0 1,1 ${ox2x},${ox2y}`,      // outer arc (large, clockwise)
+      `L ${ix2},${iy2}`,
+      `A ${ri},${ri} 0 1,0 ${ix1},${iy1}`,       // inner arc (large, counter-clockwise)
+      `Z`
+    ].join(' ');
+  }
 
   inner.filter(d => d.id !== 'root')
     .append('circle')
