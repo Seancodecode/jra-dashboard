@@ -1163,65 +1163,13 @@ function update(source) {
     .attr('class', 'ripple-group')
     .style('pointer-events', 'none');
 
-  // "Eclipse first, the rest nowhere" — metallic crescent moon at the root.
-  inner.filter(d => d.id === 'root').each(function(d) {
-    const r  = nodeR(d);
-    const g2 = d3.select(this);
-
-    // Soft glow halo
-    g2.append('circle')
-      .attr('r', r * 2.2)
-      .attr('fill', 'url(#glow-ffd700)')
-      .attr('opacity', 0.35)
-      .style('pointer-events', 'none');
-
-    // Base crescent — metallic gradient
-    g2.append('path')
-      .attr('class', 'main-node')
-      .attr('d', buildCrescent(r))
-      .attr('fill', 'url(#metallic-crescent)')
-      .attr('stroke', '#fffde0')
-      .attr('stroke-width', 1.5)
-      .attr('stroke-linejoin', 'round');
-
-    // Specular sheen — small bright inner crescent shifted up-left
-    g2.append('path')
-      .attr('d', buildCrescent(r * 0.55))
-      .attr('transform', `translate(${-r * 0.12}, ${-r * 0.18})`)
-      .attr('fill', 'rgba(255,255,230,0.22)')
-      .attr('stroke', 'none')
-      .attr('filter', 'url(#crescent-spec)')
-      .style('pointer-events', 'none');
-  });
-
-  // ── Crescent geometry ──────────────────────────────────────────────────────
-  // Two-arc SVG path. Maths:
-  //   Outer circle: center (0,0),  radius R
-  //   Inner circle: center (dx,0), radius ri   [shifted right to create the bite]
-  //   Intersection points of the two circles → the two horn tips
-  //   xi = (R²-ri²+dx²) / (2·dx),  yi = √(R²-xi²)
-  //   Centering: bounding box spans x ∈ [-R, xi], so shift everything right by (R-xi)/2
-  //   Outer arc: large (1), CCW (0) → sweeps through the left convex bulge
-  //   Inner arc: small (0), CCW (0) → cuts the concave bite from the right
-  function buildCrescent(r) {
-    const R  = r * 1.0;    // outer radius — fits exactly within nodeR
-    const ri = r * 0.78;   // inner circle radius  (controls crescent thickness)
-    const dx = r * 0.45;   // inner circle center x-offset (controls horn width)
-
-    const xi = (R*R - ri*ri + dx*dx) / (2 * dx);
-    const yi = Math.sqrt(Math.max(0, R*R - xi*xi));
-
-    // Shift all x-coords right by (R-xi)/2 to horizontally center the shape
-    const sh = (R - xi) / 2;
-    const tx = xi + sh;
-
-    return [
-      `M ${tx},${-yi}`,
-      `A ${R},${R}   0 1,0 ${tx},${yi}`,   // outer arc: large + CCW = left bulge
-      `A ${ri},${ri} 0 0,0 ${tx},${-yi}`,  // inner arc: small + CCW = concave bite
-      `Z`
-    ].join(' ');
-  }
+  inner.filter(d => d.id === 'root')
+    .append('path')
+    .attr('class', 'main-node')
+    .attr('d', d => getStarPath(0, 0, 7, nodeR(d) * 1.4, nodeR(d) * 0.6))
+    .attr('fill', d => bcolor(d))
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5);
 
   inner.filter(d => d.id !== 'root')
     .append('circle')
