@@ -1163,106 +1163,62 @@ function update(source) {
     .attr('class', 'ripple-group')
     .style('pointer-events', 'none');
 
-  // "Eclipse first, the rest nowhere" — crescent moon at the root.
-  // Built as two overlapping circles subtracted via clip: a filled outer circle
-  // with an offset inner circle punched out of it using a clipPath mask.
+  // "Eclipse first, the rest nowhere" — metallic crescent moon at the root.
   inner.filter(d => d.id === 'root').each(function(d) {
-    const r   = nodeR(d);
-    const cid = `crescent-clip-root`;
-
-    if (defs.select('#' + cid).empty()) {
-      // The clip region is the outer circle minus a slightly smaller offset circle
-      const cp = defs.append('clipPath').attr('id', cid);
-      cp.append('circle').attr('r', r * 1.6);                         // outer boundary
-      cp.append('circle').attr('cx', r * 0.9).attr('r', r * 1.35)    // punch-out offset circle
-        .attr('fill', 'black')
-        .style('mix-blend-mode', 'destination-out');
-    }
-
+    const r  = nodeR(d);
     const g2 = d3.select(this);
 
-    // Glow halo behind the crescent
+    // Soft glow halo
     g2.append('circle')
-      .attr('class', 'crescent-glow')
-      .attr('r', r * 1.6)
-      .attr('fill', bcolor(d))
-      .attr('opacity', 0.18)
-      .attr('filter', 'url(#tvStatic)')
+      .attr('r', r * 2.2)
+      .attr('fill', 'url(#glow-ffd700)')
+      .attr('opacity', 0.35)
       .style('pointer-events', 'none');
 
-    // The crescent: use SVG path with arc commands — most reliable cross-browser
-    // A crescent is drawn as: outer arc (large) + inner arc (reverse) closing the shape
-    const R  = r * 1.55;   // outer radius
-    const ri = r * 1.25;   // inner (cutout) radius
-    const ox = r * 0.55;   // horizontal offset of the inner circle center
-
-    // Outer arc: full circle points at top/bottom
-    // Inner arc: offset circle, reversed
-    const crescentPath = [
-      `M 0,${-R}`,
-      `A ${R},${R} 0 1 1 0,${R}`,            // outer arc (left sweep, large-arc)
-      `A ${ri},${ri} 0 1 0 0,${-R}`,          // inner arc reversed (right sweep, large-arc) — but offset
-    ].join(' ');
-
-    // Proper crescent using two arcs with the inner circle shifted
-    const x1o = 0,    y1o = -R;
-    const x2o = 0,    y2o =  R;
-    const x1i = ox,   y1i = -R + (R - ri);
-    const x2i = ox,   y2i =  R - (R - ri);
-
-    // Clean parametric crescent path
-    const path = `
-      M ${-R * Math.sin(0.15)},${-R * Math.cos(0.15)}
-      A ${R},${R} 0 1,1 ${-R * Math.sin(0.15)},${R * Math.cos(0.15)}
-      A ${ri},${ri} 0 1,0 ${-R * Math.sin(0.15)},${-R * Math.cos(0.15)}
-      Z
-    `;
-
-    // Base crescent — metallic gradient fill
+    // Base crescent — metallic gradient
     g2.append('path')
       .attr('class', 'main-node')
       .attr('d', buildCrescent(r))
       .attr('fill', 'url(#metallic-crescent)')
-      .attr('stroke', '#fffde0')          // warm near-white edge
+      .attr('stroke', '#fffde0')
       .attr('stroke-width', 1.5)
       .attr('stroke-linejoin', 'round');
 
-    // Specular sheen layer — a slightly smaller, semi-transparent white path
-    // offset upward to look like light catching the top of the metal curve
+    // Specular sheen — small bright inner crescent shifted up-left
     g2.append('path')
-      .attr('d', buildCrescent(r * 0.72))
-      .attr('transform', `translate(${-r * 0.18}, ${-r * 0.22})`)
-      .attr('fill', 'rgba(255,255,220,0.18)')
+      .attr('d', buildCrescent(r * 0.55))
+      .attr('transform', `translate(${-r * 0.12}, ${-r * 0.18})`)
+      .attr('fill', 'rgba(255,255,230,0.22)')
       .attr('stroke', 'none')
       .attr('filter', 'url(#crescent-spec)')
       .style('pointer-events', 'none');
   });
 
+  // ── Crescent geometry ──────────────────────────────────────────────────────
+  // Two-arc SVG path. Maths:
+  //   Outer circle: center (0,0),  radius R
+  //   Inner circle: center (dx,0), radius ri   [shifted right to create the bite]
+  //   Intersection points of the two circles → the two horn tips
+  //   xi = (R²-ri²+dx²) / (2·dx),  yi = √(R²-xi²)
+  //   Centering: bounding box spans x ∈ [-R, xi], so shift everything right by (R-xi)/2
+  //   Outer arc: large (1), CCW (0) → sweeps through the left convex bulge
+  //   Inner arc: small (0), CCW (0) → cuts the concave bite from the right
   function buildCrescent(r) {
-    const R  = r * 1.6;   // outer radius
-    const ri = r * 1.25;  // inner circle radius
-    const dx = r * 0.65;  // how far right the inner circle is shifted
+    const R  = r * 1.0;    // outer radius — fits exactly within nodeR
+    const ri = r * 0.78;   // inner circle radius  (controls crescent thickness)
+    const dx = r * 0.45;   // inner circle center x-offset (controls horn width)
 
-    // We trace: outer circle arc (almost full) then inner circle arc (reversed)
-    // using 4 points to avoid degenerate arcs at exact top/bottom
-    const a  = 0.12; // small angle offset from top/bottom to avoid SVG arc quirks
-    const sa = Math.sin(a), ca = Math.cos(a);
+    const xi = (R*R - ri*ri + dx*dx) / (2 * dx);
+    const yi = Math.sqrt(Math.max(0, R*R - xi*xi));
 
-    const ox1x = -R * sa,  ox1y = -R * ca;  // outer top
-    const ox2x =  R * sa,  ox2y =  R * ca;  // outer bottom (mirrored)
-
-    // Inner circle center is shifted right by dx
-    // Points on inner circle that align with outer circle's top/bottom
-    const iy1 = -R * ca;
-    const iy2 =  R * ca;
-    const ix1 = dx + Math.sqrt(Math.max(0, ri*ri - iy1*iy1));
-    const ix2 = dx + Math.sqrt(Math.max(0, ri*ri - iy2*iy2));
+    // Shift all x-coords right by (R-xi)/2 to horizontally center the shape
+    const sh = (R - xi) / 2;
+    const tx = xi + sh;
 
     return [
-      `M ${ox1x},${ox1y}`,
-      `A ${R},${R} 0 1,1 ${ox2x},${ox2y}`,      // outer arc (large, clockwise)
-      `L ${ix2},${iy2}`,
-      `A ${ri},${ri} 0 1,0 ${ix1},${iy1}`,       // inner arc (large, counter-clockwise)
+      `M ${tx},${-yi}`,
+      `A ${R},${R}   0 1,0 ${tx},${yi}`,   // outer arc: large + CCW = left bulge
+      `A ${ri},${ri} 0 0,0 ${tx},${-yi}`,  // inner arc: small + CCW = concave bite
       `Z`
     ].join(' ');
   }
