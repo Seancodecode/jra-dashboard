@@ -118,13 +118,10 @@
     letter-spacing:1px;text-transform:uppercase;flex-shrink:0;line-height:1.6;
   }
 
-  /* ── 8-bit / low-hardware mode ─────────────────────────────────────────── */
-  /* Crisp aliased edges (no anti-alias smoothing), no glow filters, pixel font */
   body.eightbit svg, body.eightbit svg * { shape-rendering:crispEdges; }
   body.eightbit .aura, body.eightbit .horse-photo, body.eightbit .photo-ring { display:none !important; }
   body.eightbit svg text { font-family:'Courier New',monospace !important; text-shadow:none !important; letter-spacing:0; }
   body.eightbit image { image-rendering:pixelated; }
-  /* scanline + vignette CRT overlay */
   #crt{position:fixed;inset:0;pointer-events:none;z-index:5;display:none;}
   body.eightbit #crt{display:block;
     background:
@@ -194,18 +191,9 @@
            oninput="spinSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:10px;">
     
     <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Pulse Nodes</span>
-      <button class="btn" id="waveBtn" onclick="toggleWave()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Reactive Strings</span>
+      <button class="btn" id="reactBtn" onclick="toggleReactLinks()" style="padding:2px 6px;font-size:8px;">OFF</button>
     </div>
-    <input type="range" id="waveSpeed" min="0.2" max="3" step="0.1" value="1"
-           oninput="waveSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Wobble Links</span>
-      <button class="btn" id="wobbleBtn" onclick="toggleWobble()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-    <input type="range" id="wobbleSpeed" min="0.5" max="5" step="0.1" value="2"
-           oninput="wobbleSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
 
     <div class="ctrl-row">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">Waveform</span>
@@ -262,7 +250,6 @@
         <button class="btn" id="povBtn" onclick="togglePOV()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
 
-      <!-- Tilt: orbit camera only -->
       <div id="tiltControls">
         <div class="ctrl-row">
           <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
@@ -272,7 +259,6 @@
                oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
       </div>
 
-      <!-- Spin: tilts the disc in orbit mode, orbits the world around you in POV -->
       <div class="ctrl-row">
         <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="spinLabel">3D Spin</span>
         <span class="ctrl-val" id="spin3dVal">0.0x</span>
@@ -329,10 +315,7 @@ let globalTime    = 0;
 let glowMode      = 'manual';
 let manualGlowVal = 1.0;
 let smoothedEnergy= 0;
-let isWaveOn      = false;
-let waveSpeed     = 1;
-let isWobbleOn    = false;
-let wobbleSpeed   = 2;
+let isReactLinksOn= false;
 let isSpectrumOn  = false;
 let spectrumSpeed = 2;
 let isFloatOn     = false;
@@ -351,39 +334,33 @@ let focal3d       = 820;
 let orbit3d       = false;
 let lastPX        = 0, lastPY = 0;
 
-// POV / stargaze (first-person, standing on the central star) state
 let povMode       = false;
 let lookYaw       = 0;
-let lookPitch     = -0.30;   // look slightly UP at the canopy of nodes overhead
-let povSpin       = 0;       // world rotation — the tree wheels around you
-const keys        = {};      // WASD / arrow keys currently held
-let povGround     = null;    // glowing platform/horizon element (set up at init)
+let lookPitch     = -0.30;
+let povSpin       = 0;
+const keys        = {};
+let povGround     = null;
 
-// Audio-reactive camera shake state (applies to both 2D and 3D)
 let isShakeOn     = true;
 let shakeEnergy   = 0;
 let shakeX        = 0, shakeY = 0, shakeR = 0;
 const SHAKE_MAX   = 20;
 
-// Differential ring spin: with audio, inner rings turn slow, outer rings fast.
 let isDiffSpinOn  = false;
 let diffSpinSpeed = 1;
 let ringPhase     = 0;
-let audioLevel    = 0;       // smoothed overall loudness (0..1)
+let audioLevel    = 0;
 
-// Performance: cached selections (refreshed each update) + 8-bit lite mode.
 let is8Bit        = false;
 let _frame        = 0;
-let cachedInner   = null;    // NG.selectAll('g.node-inner')
-let cachedNd      = null;    // NG.selectAll('g.nd')
-let rippleGroup   = null;    // root node's ripple <g>
-let linkSel       = null;    // LG.selectAll('path')
-let innerAnimated = false;   // whether node-inner scales are currently non-1
+let cachedInner   = null;
+let cachedNd      = null;
+let rippleGroup   = null;
+let linkSel       = null;
+let innerAnimated = false;
 
-// Smoothed per-bin spectrum (fast attack / slow release) for the "voice" waveform.
 let specSmooth    = null;
 
-// Beat detection → the center star shoots stars on each beat (BPM-synced).
 let bpmStarsOn    = true;
 let beatAvg       = 0;
 let bassPrev      = 0;
@@ -474,11 +451,9 @@ async function captureTabAudio() {
     dataArray = new Uint8Array(analyser.frequencyBinCount);
     
     sourceNode.connect(analyser);
-    // Note: Deliberately avoiding connecting to audioCtx.destination here so we don't cause an infinite echo loop of the browser's own audio
     
     audioStarted();
     
-    // Automatically stop visualizer if user clicks "Stop sharing" on the browser banner
     stream.getVideoTracks()[0].onended = () => {
       stopAudio();
     };
@@ -494,7 +469,6 @@ function audioStarted() {
   document.getElementById('stopAudioBtn').style.display = 'block';
   document.getElementById('tabAudioBtn').style.display = 'none';
   
-  // Only show the local volume control if we aren't screen sharing (since we don't route screen share back to speakers)
   if (!currentStream) {
       document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'flex');
       document.getElementById('volSlider').style.display = 'block';
@@ -522,6 +496,10 @@ function stopAudio() {
 
   applyStaticGlow(glowMode === 'audio' ? 0 : manualGlowVal);
   d3.select('#glitchDisplacement').attr('scale', 0);
+  
+  if (isReactLinksOn) {
+      (linkSel || LG.selectAll('path')).attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5).attr('stroke-opacity', 0.15);
+  }
 }
 
 function updateVolume(val) {
@@ -564,6 +542,10 @@ function toggleGlowMode() {
     
     ripples = [];
     NG.selectAll('.ripple').remove();
+    
+    if (!isReactLinksOn) {
+        (linkSel || LG.selectAll('path')).attr('stroke-opacity', 0.15 + manualGlowVal * 0.15);
+    }
   }
 }
 
@@ -590,7 +572,26 @@ function applyStaticGlow(factor) {
        return Math.min(1, base + (factor * 0.05));
     });
 
-  LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
+  if (!isReactLinksOn) {
+      LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
+  }
+}
+
+function toggleReactLinks() {
+  isReactLinksOn = !isReactLinksOn;
+  const btn = document.getElementById('reactBtn');
+  if (isReactLinksOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#00ffcc';
+    btn.style.borderColor = '#00ffcc';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    (linkSel || LG.selectAll('path'))
+      .attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5)
+      .attr('stroke-opacity', glowMode === 'audio' ? 0.1 + smoothedEnergy * 0.8 : (glowMode === 'manual' ? 0.15 + manualGlowVal * 0.15 : 0.15));
+  }
 }
 
 function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
@@ -614,7 +615,7 @@ function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
 d3.timer(elapsed => {
   globalTime = elapsed;
   _frame++;
-  if (is8Bit && (_frame % 3 !== 0)) return;   // ~20fps target for old hardware
+  if (is8Bit && (_frame % 3 !== 0)) return;
 
   if (isSpinOn) {
     mapAngle += spinSpeed * 0.2;
@@ -626,15 +627,14 @@ d3.timer(elapsed => {
     analyser.getByteFrequencyData(dataArray);
     hasAudioData = true;
 
-    // One pass over the low half of the spectrum, reused for level/shake/diff-spin.
     let lsum = 0, llim = Math.floor(dataArray.length * 0.5);
     for (let i = 0; i < llim; i++) lsum += dataArray[i];
     const rawLevel = (lsum / llim) / 255;
     audioLevel += (rawLevel - audioLevel) * 0.3;
+    smoothedEnergy += (Math.min(1, rawLevel) - smoothedEnergy) * 0.3;
 
     if (isDiffSpinOn) ringPhase += diffSpinSpeed * 0.004 * (0.25 + audioLevel * 1.6);
 
-    // Smoothed per-bin spectrum: fast attack, slow release → flowing, voice-like.
     if (isSpectrumOn) {
       if (!specSmooth || specSmooth.length !== dataArray.length) specSmooth = new Float32Array(dataArray.length);
       for (let i = 0; i < dataArray.length; i++) {
@@ -643,16 +643,14 @@ d3.timer(elapsed => {
       }
     }
 
-    // Beat detection on bass energy → emit shooting stars from the center star,
-    // so their cadence follows the song's tempo (BPM-adaptive).
     if (bpmStarsOn) {
       const bassEnd = Math.max(4, Math.floor(dataArray.length * 0.12));
       let bsum = 0; for (let i = 0; i < bassEnd; i++) bsum += dataArray[i];
       const bass = (bsum / bassEnd) / 255;
-      // SLOW baseline ≈ the song's average bass; beats are spikes above it.
-      beatAvg += (bass - beatAvg) * 0.012;
-      const rising = bass > bassPrev;                 // only fire on the onset edge
-      if (rising && bass > beatAvg * 1.28 && bass > 0.07 && (elapsed - lastBeatT) > 200) {
+      
+      beatAvg = beatAvg * 0.97 + bass * 0.03; 
+      const rising = bass > bassPrev;
+      if (rising && bass > beatAvg * 1.12 && bass > 0.08 && (elapsed - lastBeatT) > 220) {
         lastBeatT = elapsed;
         spawnShootingStars(Math.min(1, bass + (bass - beatAvg)));
       }
@@ -670,9 +668,7 @@ d3.timer(elapsed => {
       shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8;
     }
 
-    if (glowMode === 'audio' && !is8Bit) {   // 8-bit skips costly filters/glow
-      smoothedEnergy += (Math.min(1, rawLevel) - smoothedEnergy) * 0.3;
-      (linkSel || LG.selectAll('path')).attr('stroke-opacity', 0.1 + smoothedEnergy * 0.8);
+    if (glowMode === 'audio' && !is8Bit) {
       d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
       d3.select('#glitchDisplacement').attr('scale', smoothedEnergy * 100 * manualGlowVal);
       if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) {
@@ -680,9 +676,22 @@ d3.timer(elapsed => {
           op: Math.min(1, smoothedEnergy * 1.5), thickness: 2 + smoothedEnergy * 5 });
       }
     }
+    
+    if (isReactLinksOn) {
+       (linkSel || LG.selectAll('path'))
+         .attr('stroke-width', d => (d.source.id === 'root' ? 4 : 2.5) + smoothedEnergy * 12)
+         .attr('stroke-opacity', 0.2 + smoothedEnergy * 0.8);
+    } else if (glowMode === 'audio' && !is8Bit) {
+       (linkSel || LG.selectAll('path')).attr('stroke-opacity', 0.1 + smoothedEnergy * 0.8);
+    }
+    
   } else {
     if (glowMode === 'audio') { smoothedEnergy = 0; d3.select('#glitchDisplacement').attr('scale', 0); }
-    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; audioLevel *= 0.9;
+    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; audioLevel *= 0.9; smoothedEnergy *= 0.9;
+    
+    if (isReactLinksOn) {
+        (linkSel || LG.selectAll('path')).attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5).attr('stroke-opacity', 0.15);
+    }
   }
 
   for (let i = ripples.length - 1; i >= 0; i--) {
@@ -704,10 +713,7 @@ d3.timer(elapsed => {
 
   updateShootingStars();
 
-  // Per-node pulsing only when something actually animates it; otherwise skip the
-  // whole pass (and reset scales to 1 once when it goes idle). Native DOM writes +
-  // cached child refs avoid per-frame d3 sub-selections.
-  const animateInner = hasAudioData || isWaveOn;
+  const animateInner = hasAudioData;
   const innerSel = cachedInner || NG.selectAll('g.node-inner');
   if (animateInner) {
     innerSel.each(function(d) {
@@ -727,9 +733,7 @@ d3.timer(elapsed => {
         }
         audioScale = normFreq * 0.8;
       }
-      const scale = isWaveOn
-        ? 1 + audioScale * 0.3 + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - d.depth * 1.5)
-        : 1 + audioScale * 0.3;
+      const scale = 1 + audioScale * 0.3;
       this.setAttribute('transform', `scale(${scale})`);
     });
     innerAnimated = true;
@@ -738,7 +742,6 @@ d3.timer(elapsed => {
     innerAnimated = false;
   }
 
-  // Positions + a single link redraw per frame.
   if (is3DOn) {
     if (povMode) {
       const ls = 0.035;
@@ -751,7 +754,7 @@ d3.timer(elapsed => {
     } else if (!orbit3d) {
       yaw3d += spin3dSpeed * 0.01;
     }
-    project3D();                       // transforms + (throttled) sort + links + ground
+    project3D();
   } else {
     let needLinks = false;
     if (isDiffSpinOn && !isFloatOn && root) {
@@ -764,21 +767,19 @@ d3.timer(elapsed => {
       (cachedNd || NG.selectAll('g.nd')).attr('transform', d => `translate(${d.cartX},${d.cartY})`);
       needLinks = true;
     }
-    if (isSpectrumOn || (isWobbleOn && !isFloatOn)) needLinks = true;
+    if (isSpectrumOn) needLinks = true;
     if (needLinks) redrawLinksFast();
   }
 
   applyCameraTransform();
 });
 
-// Per-node azimuth including the differential ring spin (outer rings turn faster).
 function ringAz(d){
   return d.x + (isDiffSpinOn ? ringPhase * d.depth : 0);
 }
 
-// On each detected beat the center star fires a burst of shooting stars outward.
 function spawnShootingStars(strength){
-  if (shootingStars.length > 70) return;             // safety cap
+  if (shootingStars.length > 70) return;
   const n = Math.min(3, 1 + Math.floor(strength * 3));
   for (let k = 0; k < n; k++) {
     const ang = Math.random() * Math.PI * 2;
@@ -795,7 +796,6 @@ function spawnShootingStars(strength){
 
 function updateShootingStars(){
   if (!starFx) return;
-  // Anchor at the central star (its projected position in 3D, else screen center).
   let ax = cx, ay = cy;
   if (root && root.children !== undefined) {
     if (isFinite(root.cartX)) ax = root.cartX;
@@ -867,44 +867,6 @@ function toggleSpin() {
     btn.style.color = '';
     btn.style.borderColor = '';
     slider.style.opacity = '0.5';
-  }
-}
-
-function toggleWave() {
-  isWaveOn = !isWaveOn;
-  const btn = document.getElementById('waveBtn');
-  const slider = document.getElementById('waveSpeed');
-  if (isWaveOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    slider.style.opacity = '1';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    slider.style.opacity = '0.5';
-    if (!isAudioPlaying) {
-        NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
-    }
-  }
-}
-
-function toggleWobble() {
-  isWobbleOn = !isWobbleOn;
-  const btn = document.getElementById('wobbleBtn');
-  const slider = document.getElementById('wobbleSpeed');
-  if (isWobbleOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    slider.style.opacity = '1';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    slider.style.opacity = '0.5';
-    redrawLinksFast();
   }
 }
 
@@ -994,13 +956,6 @@ function toggleFloat() {
 
 let rankOpen = false;
 
-// ── 3D modes ──────────────────────────────────────────────────────────────────
-// Two cameras, both reusing each node's existing ring position (angle d.x,
-// radius d.y) and writing back to cartX/cartY so links/tooltips/audio/zoom keep
-// working unchanged:
-//   • Orbit  — a tilted, spinning galaxy disc viewed from outside.
-//   • POV    — stand at the center and look up into a dome of stars (WASD look,
-//              Bulge slider = your elevation).
 function setTilt(v){
   pitch3d = parseFloat(v);
   document.getElementById('tiltVal').textContent = Math.round(pitch3d * 180 / Math.PI) + '\u00b0';
@@ -1023,7 +978,6 @@ function toggle8Bit(){
     btn.style.color = '#7CFC00';
     btn.style.borderColor = '#7CFC00';
     btn.style.boxShadow = '0 0 10px rgba(124,252,0,0.3)';
-    // Drop the expensive SVG turbulence/displacement filter currently on screen.
     NG.selectAll('.aura').attr('filter', null);
     NG.selectAll('.ripple').attr('filter', null);
     d3.select('#glitchDisplacement').attr('scale', 0);
@@ -1035,7 +989,7 @@ function toggle8Bit(){
   }
   if (root) {
     if (is3DOn) project3D();
-    else { redrawLinksFast(); update(root); }   // refresh link shapes (curved ↔ straight)
+    else { redrawLinksFast(); update(root); }
   }
 }
 
@@ -1075,7 +1029,7 @@ function toggleDiffSpin(){
     btn.style.borderColor = '';
     btn.style.boxShadow = 'none';
     ringPhase = 0;
-    if (root && !is3DOn) update(root);   // snap flat layout back to alignment
+    if (root && !is3DOn) update(root);
   }
 }
 
@@ -1111,9 +1065,7 @@ function togglePOV(){
     btn.style.color = '#00ffcc';
     btn.style.borderColor = '#00ffcc';
     btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
-    lookYaw = 0; lookPitch = -0.30;          // look up at the canopy overhead
-    // The whole point of POV is watching the tree wheel around you, so give it a
-    // gentle default orbit (orbit-galaxy mode still stays still by default).
+    lookYaw = 0; lookPitch = -0.30;
     if (parseFloat(spinSlider.value) === 0) { spinSlider.value = 0.5; setSpin3D(0.5); }
   } else {
     btn.textContent = 'OFF';
@@ -1138,14 +1090,12 @@ function toggle3D(){
     btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
     ctl.style.display = 'block';
 
-    // Conflicting modes manipulate position/rotation directly — turn them off.
     if (isFloatOn) toggleFloat();
     if (isSpinOn)  toggleSpin();
     mapAngle = 0;
     d3.select('#mapLayer').attr('transform', null);
 
     if (root) {
-      // Clear any manual node positions so the disc is clean, then refresh layout.
       traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
       update(root);
       project3D();
@@ -1157,7 +1107,7 @@ function toggle3D(){
     btn.style.boxShadow = 'none';
     ctl.style.display = 'none';
     if (povGround) povGround.style('display', 'none');
-    if (root) update(root); // restores flat radial layout, scale=1, opacity=1
+    if (root) update(root);
   }
 }
 
@@ -1171,10 +1121,8 @@ function project3D(){
   redrawLinksFast();
 }
 
-// Depth sorting reorders the DOM, which is expensive; only do it every few frames.
 function shouldSort3D(){ return (_frame & 3) === 0; }
 
-// External orbit camera: tilted, spinning disc with a center bulge.
 function projectOrbit(nodes, maxR){
   const cyaw = Math.cos(yaw3d),  syaw = Math.sin(yaw3d);
   const cpit = Math.cos(pitch3d), spit = Math.sin(pitch3d);
@@ -1219,34 +1167,30 @@ function projectOrbit(nodes, maxR){
   if (shouldSort3D()) sel.sort((a, b) => a._z3 - b._z3);
 }
 
-// First-person POV: you are SMALL, standing on the central star, which spreads
-// out beneath you to the horizon (drawn as the glowing ground plane). The rest of
-// the tree arcs up and OVERHEAD — the further a generation spreads out, the higher
-// it climbs toward the zenith. Nearest rings loom large; distant ones tower far up.
 function projectPOV(nodes, maxR){
   const focal = 820;
   const near  = 35;
-  const camY  = 26 + bulge3d * 0.45;     // you stand low → world feels huge; Bulge lifts you
+  const camY  = 26 + bulge3d * 0.45;
   const snap  = is8Bit;
 
   const cyaw = Math.cos(lookYaw),   syaw = Math.sin(lookYaw);
   const cpit = Math.cos(lookPitch), spit = Math.sin(lookPitch);
 
   nodes.forEach(d => {
-    const t  = maxR > 0 ? d.y / maxR : 0;        // 0 root … 1 outermost ring
+    const t  = maxR > 0 ? d.y / maxR : 0;
     const az = ringAz(d) + povSpin;
 
     let dist, elev;
     if (d.depth === 0) {
-      dist = 130; elev = -0.6;                   // the platform-star, at your feet
+      dist = 130; elev = -0.6;
     } else {
-      dist = 240 + t * 2000;                     // inner rings close, outer far away
-      elev = Math.pow(t, 0.85) * (Math.PI / 2) * 0.96; // climb toward straight overhead
+      dist = 240 + t * 2000;
+      elev = Math.pow(t, 0.85) * (Math.PI / 2) * 0.96;
     }
 
     const wx = dist * Math.cos(elev) * Math.cos(az);
     const wz = dist * Math.cos(elev) * Math.sin(az);
-    const wy = dist * Math.sin(elev);            // outer spread → higher up
+    const wy = dist * Math.sin(elev);
 
     const relx = wx, rely = wy - camY, relz = wz;
     const x1 =  cyaw * relx - syaw * relz;
@@ -1263,10 +1207,10 @@ function projectPOV(nodes, maxR){
       d.cartX  = px;
       d.cartY  = py;
       d._z3    = z2;
-      d._persp = Math.min(7, persp);             // let the nearest rings loom large
+      d._persp = Math.min(7, persp);
       d._vis3  = true;
     } else {
-      d._vis3  = false;                          // behind / below you — cull
+      d._vis3  = false;
       d._z3    = z2;
       d.cartX  = NaN; d.cartY = NaN; d._persp = 0;
     }
@@ -1280,8 +1224,6 @@ function projectPOV(nodes, maxR){
   drawPovGround();
 }
 
-// The platform: a glowing floor (the star's surface) receding to the horizon.
-// Horizon line tracks where you look — pitch up and it sinks, pitch down it rises.
 function drawPovGround(){
   if (!povGround) return;
   const focal = 820;
@@ -1293,7 +1235,6 @@ function drawPovGround(){
     .attr('height', Math.max(0, H * 2 - horizonY));
 }
 
-// Combined zoom + audio shake applied to the whole scene (covers 2D and 3D).
 function applyCameraTransform(){
   if (Math.abs(shakeX) + Math.abs(shakeY) + Math.abs(shakeR) > 0.05) {
     g.attr('transform', `translate(${shakeX},${shakeY}) rotate(${shakeR},${cx},${cy}) ${zoomT}`);
@@ -1301,8 +1242,6 @@ function applyCameraTransform(){
     g.attr('transform', `${zoomT}`);
   }
 }
-// ──────────────────────────────────────────────────────────────────────────────
-
 
 function toggleRankPanel() {
   rankOpen = !rankOpen;
@@ -1439,8 +1378,6 @@ const zoom = d3.zoom().scaleExtent([0.05, 8])
 });
 svg.call(zoom);
 
-// Drag to look/orbit (only active in 3D, and only when the drag starts on empty
-// space; drags that start on a node are handled by the node's own drag handler).
 const svgNode = svg.node();
 svgNode.addEventListener('pointerdown', e => {
   if (!is3DOn) return;
@@ -1453,7 +1390,7 @@ window.addEventListener('pointermove', e => {
   lastPX = e.clientX; lastPY = e.clientY;
   if (povMode) {
     lookYaw   += dx;
-    lookPitch += dy;                                  // drag up → look up
+    lookPitch += dy;
     lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
   } else {
     yaw3d   += dx;
@@ -1465,7 +1402,6 @@ window.addEventListener('pointermove', e => {
 });
 window.addEventListener('pointerup', () => { orbit3d = false; });
 
-// WASD / arrow keys steer the POV camera.
 window.addEventListener('keydown', e => {
   if (!is3DOn || !povMode) return;
   const k = e.key.toLowerCase();
@@ -1481,8 +1417,6 @@ const mapLayer = g.append('g').attr('id', 'mapLayer');
 
 const defs = svg.append('defs');
 
-// POV platform: a subtle dark floor that fades downward, just enough to give a
-// sense of ground without a distracting bright horizon.
 const groundGrad = defs.append('linearGradient')
   .attr('id', 'groundGrad').attr('x1', '0').attr('y1', '0').attr('x2', '0').attr('y2', '1');
 groundGrad.append('stop').attr('offset', '0%').attr('stop-color', '#0a0c14').attr('stop-opacity', 0.0);
@@ -1492,7 +1426,7 @@ groundGrad.append('stop').attr('offset', '100%').attr('stop-color', '#04050a').a
 povGround = svg.append('g').attr('id', 'povGround').style('display', 'none');
 povGround.append('rect').attr('class', 'pov-floor')
   .attr('x', 0).attr('width', W).attr('y', cy).attr('height', H).attr('fill', 'url(#groundGrad)');
-povGround.lower();   // behind the node/link layer
+povGround.lower();
 
 const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
 allColors.forEach(c => {
@@ -1504,26 +1438,29 @@ allColors.forEach(c => {
   grad.append('stop').attr('offset', '15%').attr('stop-color', c).attr('stop-opacity', 0.8);
   grad.append('stop').attr('offset', '50%').attr('stop-color', c).attr('stop-opacity', 0.3);
   grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
+  
+  const sphereGrad = defs.append('radialGradient')
+    .attr('id', 'sphere-' + c.replace('#', ''))
+    .attr('cx', '35%').attr('cy', '35%').attr('r', '65%');
+    
+  sphereGrad.append('stop').attr('offset', '0%').attr('stop-color', '#ffffff').attr('stop-opacity', 0.8);
+  sphereGrad.append('stop').attr('offset', '20%').attr('stop-color', c).attr('stop-opacity', 1);
+  sphereGrad.append('stop').attr('offset', '100%').attr('stop-color', d3.color(c).darker(1.5)).attr('stop-opacity', 1);
 });
 
-// ── Metallic crescent gradient ────────────────────────────────────────────────
-// Linear gradient angled at ~45° — bright highlight streak across the gold,
-// with deep shadow at the edges to sell the 3D metallic look.
 const metalGrad = defs.append('linearGradient')
   .attr('id', 'metallic-crescent')
   .attr('x1', '0%').attr('y1', '0%')
   .attr('x2', '100%').attr('y2', '100%');
 
-metalGrad.append('stop').attr('offset',  '0%').attr('stop-color', '#3a2a00');   // deep shadow
-metalGrad.append('stop').attr('offset', '18%').attr('stop-color', '#b8860b');   // dark gold
-metalGrad.append('stop').attr('offset', '38%').attr('stop-color', '#ffd700');   // gold
-metalGrad.append('stop').attr('offset', '52%').attr('stop-color', '#fffacd');   // bright highlight streak
-metalGrad.append('stop').attr('offset', '62%').attr('stop-color', '#ffd700');   // gold return
-metalGrad.append('stop').attr('offset', '80%').attr('stop-color', '#b8860b');   // dark gold
-metalGrad.append('stop').attr('offset','100%').attr('stop-color', '#3a2a00');   // deep shadow
+metalGrad.append('stop').attr('offset',  '0%').attr('stop-color', '#3a2a00');
+metalGrad.append('stop').attr('offset', '18%').attr('stop-color', '#b8860b');
+metalGrad.append('stop').attr('offset', '38%').attr('stop-color', '#ffd700');
+metalGrad.append('stop').attr('offset', '52%').attr('stop-color', '#fffacd');
+metalGrad.append('stop').attr('offset', '62%').attr('stop-color', '#ffd700');
+metalGrad.append('stop').attr('offset', '80%').attr('stop-color', '#b8860b');
+metalGrad.append('stop').attr('offset','100%').attr('stop-color', '#3a2a00');
 
-// Specular highlight filter — a soft blur applied to a white overlay
-// to simulate the bright sheen catching light on a curved metal surface
 const specFilter = defs.append('filter')
   .attr('id', 'crescent-spec')
   .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
@@ -1531,7 +1468,6 @@ specFilter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', '
 const feMerge = specFilter.append('feMerge');
 feMerge.append('feMergeNode').attr('in', 'blur');
 feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
-// ─────────────────────────────────────────────────────────────────────────────
 
 const staticFilter = defs.append('filter')
   .attr('id', 'tvStatic')
@@ -1569,9 +1505,6 @@ function showTip(e, d){
   let imgHtml = '';
 
   if (d.id !== 'root') {
-    // Pull directly from our Supabase horse_pics bucket.
-    // The scraper saved files as .jpg or .png based on magic bytes,
-    // so we try .jpg first and fall back to .png if it 404s.
     const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
     const jpgUrl = `${sbBase}/${d.id}.jpg`;
     const pngUrl = `${sbBase}/${d.id}.png`;
@@ -1619,12 +1552,10 @@ function hideTip(){
   }, 250);
 }
 
-// Smooth curve through the spectrum sample points (passes through every point).
 const specLine = d3.line().curve(d3.curveCatmullRom.alpha(0.5));
 
 function linkPath(s, t) {
   if (is8Bit) {
-    // Cheap chunky straight segment, snapped to a coarse pixel grid.
     const sx = Math.round(s.cartX / 4) * 4, sy = Math.round(s.cartY / 4) * 4;
     const tx = Math.round(t.cartX / 4) * 4, ty = Math.round(t.cartY / 4) * 4;
     return `M${sx},${sy}L${tx},${ty}`;
@@ -1637,8 +1568,6 @@ function linkPath(s, t) {
   let bow = len * 0.08;
 
   if (isSpectrumOn) {
-    // Trace the song's actual (smoothed) spectrum along the link as one smooth
-    // curve. Each ring reads a different frequency band → songs look distinct.
     const segments = 24;
     const angle = Math.atan2(dy, dx);
     const phase = globalTime * 0.004 * spectrumSpeed;
@@ -1653,29 +1582,23 @@ function linkPath(s, t) {
       const baseX = s.cartX + dx * pct;
       const baseY = s.cartY + dy * pct;
 
-      let amp = 5;                                       // gentle idle shimmer
+      let amp = 5;
       if (specSmooth) {
         const fpos = startBin + pct * winBins;
         const b0 = Math.min(fLen - 1, Math.floor(fpos));
         const b1 = Math.min(fLen - 1, b0 + 1);
         const fr = fpos - b0;
-        amp += (specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr) * 72;  // energy
+        amp += (specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr) * 72;
       }
 
-      const taper = Math.sin(pct * Math.PI);             // anchored at both ends
-      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 2 - phase);    // travelling shimmer
+      const taper = Math.sin(pct * Math.PI);
+      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 2 - phase);
       const off   = amp * taper * flow;
 
       pts.push([baseX - Math.sin(angle) * off, baseY + Math.cos(angle) * off]);
     }
     pts.push([t.cartX, t.cartY]);
     return specLine(pts);
-  }
-
-  if (isWobbleOn) {
-    const phase = s.depth;
-    const wobble = Math.sin(globalTime * 0.005 * wobbleSpeed - phase) * 20;
-    bow += wobble;
   }
 
   return `M${s.cartX},${s.cartY}Q${mx - dy/len*bow},${my + dx/len*bow} ${t.cartX},${t.cartY}`;
@@ -1718,8 +1641,6 @@ function update(source) {
     .on('drag',  (e, d) => {
       isDragging = true;
       if (is3DOn) {
-        // Repositioning individual nodes makes no sense once they're projected;
-        // use the drag to steer the camera instead.
         const mx = (e.sourceEvent.movementX || 0) * 0.006;
         const my = (e.sourceEvent.movementY || 0) * 0.006;
         if (povMode) {
@@ -1815,21 +1736,17 @@ function update(source) {
     .append('circle')
     .attr('class', 'main-node')
     .attr('r', d => nodeR(d))
-    .attr('fill', d => (d.data.g1 > 0) ? bcolor(d) : '#1a1a26')
+    .attr('fill', d => (d.data.g1 > 0) ? `url(#sphere-${bcolor(d).replace('#', '')})` : '#1a1a26')
     .attr('stroke', d => bcolor(d));
 
-  // ── Horse photos on nodes ─────────────────────────────────────────────────
-  // Only show on G1 winners (they have big enough nodes to be worth it).
-  // Each node gets its own <clipPath> so the photo is cropped to a circle.
   inner.filter(d => d.id !== 'root')
     .each(function(d) {
       const r   = nodeR(d);
       const cid = `img-clip-${d.id}`;
 
-      // Register the clip path in <defs> (guard against duplicates on re-render)
       if (defs.select('#' + cid).empty()) {
         defs.append('clipPath').attr('id', cid)
-          .append('circle').attr('r', r - 1.5); // slight inset so the colored stroke shows
+          .append('circle').attr('r', r - 1.5);
       }
 
       const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
@@ -1845,7 +1762,6 @@ function update(source) {
         .attr('preserveAspectRatio', 'xMidYMid slice')
         .style('pointer-events', 'none');
 
-      // jpg → png → hide fallback chain
       img.node().onerror = function() {
         if (this.getAttribute('href') === jpgUrl) {
           this.setAttribute('href', pngUrl);
@@ -1854,7 +1770,6 @@ function update(source) {
         }
       };
 
-      // Colored stroke ring rendered on top of the photo
       d3.select(this).append('circle')
         .attr('class', 'photo-ring')
         .attr('r', r)
@@ -1863,7 +1778,6 @@ function update(source) {
         .attr('stroke-width', 2)
         .style('pointer-events', 'none');
     });
-  // ─────────────────────────────────────────────────────────────────────────
 
   inner.filter(d => d.id !== 'root')
     .append('text').text(d => d.data.name)
@@ -1924,12 +1838,11 @@ function update(source) {
 
   nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
 
-  // Cache selections so the per-frame loop doesn't re-query the DOM every tick.
   cachedInner = NG.selectAll('g.node-inner');
   cachedNd    = NG.selectAll('g.nd');
   linkSel     = LG.selectAll('path');
   rippleGroup = cachedNd.filter(d => d.id === 'root').select('.ripple-group');
-  cachedInner.each(function(d){ d._auraEl = undefined; d._mainEl = undefined; }); // refs may be stale
+  cachedInner.each(function(d){ d._auraEl = undefined; d._mainEl = undefined; });
 
   if (glowMode === 'manual') applyStaticGlow(manualGlowVal);
 
