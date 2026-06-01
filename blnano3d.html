@@ -836,21 +836,54 @@ function darkerStr(cc, k) { const d = cc.darker(k); return d + ''; }
 const AURA_REF = 100, SPHERE_REF = 50;
 const _auraGrad = {}, _sphereGrad = {};
 
-// Offscreen TV-static noise tile, regenerated per frame in Audio glow mode.
-// Composited over the scene with an 'overlay' blend so it textures the bright
-// glow / auras / ripples while leaving the near-black background untouched —
-// the canvas stand-in for the SVG feTurbulence + feDisplacementMap filter.
+// Smooth, tileable fractal-noise tile (multi-octave value noise) built ONCE.
+// This is the canvas stand-in for the SVG feTurbulence field — cloudy and
+// low-frequency, NOT per-pixel static. It's used two ways in Audio glow mode:
+// (1) to warp the aura outline (the feDisplacementMap analog), and
+// (2) as a gentle cloudy modulation clipped to the aura.
+const NOISE = 128;
 const noiseCv = document.createElement('canvas');
-noiseCv.width = 220; noiseCv.height = 130;
+noiseCv.width = NOISE; noiseCv.height = NOISE;
 const noiseCtx = noiseCv.getContext('2d');
-const _noiseImg = noiseCtx.createImageData(noiseCv.width, noiseCv.height);
-function regenNoise() {
-  const d = _noiseImg.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const v = (Math.random() * 255) | 0;
-    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+(function buildFractalNoise() {
+  function lattice(p) { const g = new Float32Array(p * p); for (let i = 0; i < g.length; i++) g[i] = Math.random(); return { g, p }; }
+  function smp(l, u, v) {
+    const fx = u * l.p, fy = v * l.p;
+    const x0 = ((fx | 0) % l.p + l.p) % l.p, y0 = ((fy | 0) % l.p + l.p) % l.p;
+    const x1 = (x0 + 1) % l.p, y1 = (y0 + 1) % l.p;
+    let tx = fx - Math.floor(fx), ty = fy - Math.floor(fy);
+    tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);   // smoothstep
+    const a = l.g[y0 * l.p + x0], b = l.g[y0 * l.p + x1], c = l.g[y1 * l.p + x0], d = l.g[y1 * l.p + x1];
+    return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
   }
-  noiseCtx.putImageData(_noiseImg, 0, 0);
+  const oct = [lattice(8), lattice(16), lattice(32)], amp = [0.55, 0.3, 0.15];
+  const max = amp[0] + amp[1] + amp[2];
+  const img = noiseCtx.createImageData(NOISE, NOISE), dd = img.data;
+  for (let y = 0; y < NOISE; y++) for (let x = 0; x < NOISE; x++) {
+    const u = x / NOISE, v = y / NOISE;
+    let n = 0; for (let o = 0; o < 3; o++) n += smp(oct[o], u, v) * amp[o];
+    n = n / max;
+    const val = (60 + n * 150) | 0;            // mid-grey biased so 'overlay' stays gentle
+    const i = (y * NOISE + x) * 4;
+    dd[i] = dd[i + 1] = dd[i + 2] = val; dd[i + 3] = 255;
+  }
+  noiseCtx.putImageData(img, 0, 0);
+})();
+
+// A wobbling, turbulent ring path centred at the origin — warps the aura edge
+// (the displacement effect). amp 0 → a clean circle.
+function traceWobble(R, amp, t) {
+  if (amp <= 0.001) { ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); return; }
+  const N = 30;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const a = i / N * Math.PI * 2;
+    const w = Math.sin(a * 3 + t * 0.006) * 0.5 + Math.sin(a * 5 - t * 0.009) * 0.32 + Math.sin(a * 8 + t * 0.014) * 0.2;
+    const rr = R * (1 + w * amp);
+    const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
 }
 function auraGrad(c) {
   if (_auraGrad[c]) return _auraGrad[c];
@@ -886,29 +919,30 @@ function fillSphere(c, x, y, r) {
 // aura disk itself, so the noise lives on the auras and nowhere else.
 function drawAura(c, x, y, auraR, alpha, glitch) {
   if (alpha <= 0.01 || auraR <= 0) return;
-  let ox = x, oy = y, sr = auraR;
-  if (glitch > 0.01) {                // jitter the whole halo (displacement feel)
-    ox += (Math.random() - 0.5) * glitch * 14;
-    oy += (Math.random() - 0.5) * glitch * 14;
-    sr *= 1 + (Math.random() - 0.5) * glitch * 0.5;
-  }
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
-  ctx.translate(ox, oy);
-  const s = sr / AURA_REF; ctx.scale(s, s);
-  ctx.fillStyle = auraGrad(c);
-  ctx.beginPath(); ctx.arc(0, 0, AURA_REF, 0, Math.PI * 2); ctx.fill();
+  ctx.translate(x, y);
+  const s = auraR / AURA_REF; ctx.scale(s, s);
 
-  // grain, clipped to this aura disk only
   const k = zoomT.k || 1;
-  if (glitch > 0.02 && sr * k > 5) {
-    ctx.beginPath(); ctx.arc(0, 0, AURA_REF, 0, Math.PI * 2); ctx.clip();
+  const t = globalTime;
+  const wob = (glitch > 0.02 && auraR * k > 5) ? Math.min(0.42, glitch * 0.4) : 0;
+
+  // warped (or clean) halo edge, then fill with the gradient
+  traceWobble(AURA_REF, wob, t);
+  ctx.fillStyle = auraGrad(c);
+  ctx.fill();
+
+  // gentle cloudy turbulence, clipped to the same warped halo
+  if (wob > 0) {
+    ctx.clip();                                  // reuse current path as clip
     ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = Math.min(0.85, alpha) * Math.min(1, glitch * 1.3);
-    ctx.imageSmoothingEnabled = false;
-    const nw = noiseCv.width, nh = noiseCv.height;
-    const sx = Math.random() * nw * 0.5, sy = Math.random() * nh * 0.5;   // random crop = animated static
-    ctx.drawImage(noiseCv, sx, sy, nw * 0.5, nh * 0.5, -AURA_REF, -AURA_REF, AURA_REF * 2, AURA_REF * 2);
+    ctx.globalAlpha = Math.min(0.55, alpha) * Math.min(1, glitch);
+    ctx.imageSmoothingEnabled = true;            // smooth clouds, not pixel static
+    const drift = t * 0.02;
+    const win = NOISE * 0.55;
+    const sx = (drift % (NOISE - win)), sy = ((drift * 0.6) % (NOISE - win));
+    ctx.drawImage(noiseCv, sx, sy, win, win, -AURA_REF, -AURA_REF, AURA_REF * 2, AURA_REF * 2);
   }
   ctx.restore();
 }
@@ -1039,9 +1073,6 @@ function renderCanvas() {
   }
 
   ctx.clearRect(0, 0, W, H);
-
-  // refresh the static tile so per-aura grain animates (Audio glow mode only)
-  if (glowMode === 'audio' && !is8Bit && glitchAmt > 0.02 && (_frame % 2 === 0)) regenNoise();
 
   ctx.save();
   ctx.translate(zoomT.x + shakeX, zoomT.y + shakeY);
