@@ -779,17 +779,17 @@ function ringAz(d){
 }
 
 function spawnShootingStars(strength){
-  if (shootingStars.length > 70) return;
-  const n = Math.min(3, 1 + Math.floor(strength * 3));
+  if (shootingStars.length > 400) return;
+  const n = Math.min(25, 5 + Math.floor(strength * 30));
   for (let k = 0; k < n; k++) {
     const ang = Math.random() * Math.PI * 2;
     shootingStars.push({
       id: Math.random().toString(36).slice(2),
       ang,
       r: 30,
-      speed: 9 + strength * 16 + Math.random() * 5,
-      len: 36 + strength * 90,
-      op: 1
+      speed: 20 + strength * 40 + Math.random() * 15,
+      len: 70 + strength * 200,
+      op: 1.5
     });
   }
 }
@@ -806,22 +806,23 @@ function updateShootingStars(){
   for (let i = shootingStars.length - 1; i >= 0; i--) {
     const s = shootingStars[i];
     s.r  += s.speed;
-    s.op -= 0.014;
+    s.op -= 0.008;
     if (s.op <= 0 || s.r > maxReach) shootingStars.splice(i, 1);
   }
 
   const sel = starFx.selectAll('line.shoot').data(shootingStars, d => d.id);
   sel.enter().append('line')
       .attr('class', 'shoot')
-      .attr('stroke', '#fff7d6')
+      .attr('stroke', '#ffffff')
       .attr('stroke-linecap', 'round')
     .merge(sel)
       .attr('x1', d => ax + Math.cos(d.ang) * Math.max(0, d.r - d.len))
       .attr('y1', d => ay + Math.sin(d.ang) * Math.max(0, d.r - d.len))
       .attr('x2', d => ax + Math.cos(d.ang) * d.r)
       .attr('y2', d => ay + Math.sin(d.ang) * d.r)
-      .attr('stroke-width', d => 1.4 + 2.6 * d.op)
-      .attr('stroke-opacity', d => d.op);
+      .attr('stroke-width', d => 2 + 4 * d.op)
+      .attr('stroke-opacity', d => Math.min(1, d.op))
+      .style('filter', 'drop-shadow(0px 0px 8px #fff7d6)');
   sel.exit().remove();
 }
 
@@ -1583,17 +1584,20 @@ function linkPath(s, t) {
       const baseY = s.cartY + dy * pct;
 
       let amp = 5;
+      let jitter = 0;
       if (specSmooth) {
         const fpos = startBin + pct * winBins;
         const b0 = Math.min(fLen - 1, Math.floor(fpos));
         const b1 = Math.min(fLen - 1, b0 + 1);
         const fr = fpos - b0;
-        amp += (specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr) * 72;
+        
+        amp += (specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr) * 180;
+        jitter = (Math.random() - 0.5) * (specSmooth[b0] || 0) * 60;
       }
 
       const taper = Math.sin(pct * Math.PI);
-      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 2 - phase);
-      const off   = amp * taper * flow;
+      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - phase * 2);
+      const off   = (amp * taper * flow) + (jitter * taper);
 
       pts.push([baseX - Math.sin(angle) * off, baseY + Math.cos(angle) * off]);
     }
