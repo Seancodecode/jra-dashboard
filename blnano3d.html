@@ -240,6 +240,11 @@
       </div>
     </div>
 
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">BPM Stars</span>
+      <button class="btn" id="bpmStarsBtn" onclick="toggleBpmStars()" style="padding:2px 6px;font-size:8px;color:#fff7d6;border-color:#fff7d6;">ON</button>
+    </div>
+
     <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">8-Bit Mode</span>
       <button class="btn" id="eightBitBtn" onclick="toggle8Bit()" style="padding:2px 6px;font-size:8px;">OFF</button>
@@ -374,6 +379,16 @@ let cachedNd      = null;    // NG.selectAll('g.nd')
 let rippleGroup   = null;    // root node's ripple <g>
 let linkSel       = null;    // LG.selectAll('path')
 let innerAnimated = false;   // whether node-inner scales are currently non-1
+
+// Smoothed per-bin spectrum (fast attack / slow release) for the "voice" waveform.
+let specSmooth    = null;
+
+// Beat detection → the center star shoots stars on each beat (BPM-synced).
+let bpmStarsOn    = true;
+let beatAvg       = 0;
+let lastBeatT     = -1e9;
+let shootingStars = [];
+let starFx        = null;
 
 let audioCtx = null;
 let analyser = null;
@@ -616,6 +631,28 @@ d3.timer(elapsed => {
 
     if (isDiffSpinOn) ringPhase += diffSpinSpeed * 0.004 * (0.25 + audioLevel * 1.6);
 
+    // Smoothed per-bin spectrum: fast attack, slow release → flowing, voice-like.
+    if (isSpectrumOn) {
+      if (!specSmooth || specSmooth.length !== dataArray.length) specSmooth = new Float32Array(dataArray.length);
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 255;
+        specSmooth[i] += (v - specSmooth[i]) * (v > specSmooth[i] ? 0.55 : 0.12);
+      }
+    }
+
+    // Beat detection on bass energy → emit shooting stars from the center star,
+    // so their cadence follows the song's tempo (BPM-adaptive).
+    if (bpmStarsOn) {
+      const bassEnd = Math.max(4, Math.floor(dataArray.length * 0.12));
+      let bsum = 0; for (let i = 0; i < bassEnd; i++) bsum += dataArray[i];
+      const bass = (bsum / bassEnd) / 255;
+      beatAvg += (bass - beatAvg) * 0.08;            // slow moving baseline
+      if (bass > beatAvg * 1.35 && bass > 0.10 && (elapsed - lastBeatT) > 250) {
+        lastBeatT = elapsed;
+        spawnShootingStars(bass);
+      }
+    }
+
     if (isShakeOn) {
       const transient = Math.max(0, rawLevel - shakeEnergy);
       shakeEnergy += (rawLevel - shakeEnergy) * 0.35;
@@ -658,6 +695,8 @@ d3.timer(elapsed => {
          .attr('filter', (glowMode === 'audio' && !is8Bit) ? 'url(#tvStatic)' : null);
       rpl.exit().remove();
   }
+
+  updateShootingStars();
 
   // Per-node pulsing only when something actually animates it; otherwise skip the
   // whole pass (and reset scales to 1 once when it goes idle). Native DOM writes +
@@ -729,6 +768,55 @@ d3.timer(elapsed => {
 // Per-node azimuth including the differential ring spin (outer rings turn faster).
 function ringAz(d){
   return d.x + (isDiffSpinOn ? ringPhase * d.depth : 0);
+}
+
+// On each detected beat the center star fires a burst of shooting stars outward.
+function spawnShootingStars(strength){
+  if (shootingStars.length > 70) return;             // safety cap
+  const n = Math.min(3, 1 + Math.floor(strength * 3));
+  for (let k = 0; k < n; k++) {
+    const ang = Math.random() * Math.PI * 2;
+    shootingStars.push({
+      id: Math.random().toString(36).slice(2),
+      ang,
+      r: 30,
+      speed: 9 + strength * 16 + Math.random() * 5,
+      len: 36 + strength * 90,
+      op: 1
+    });
+  }
+}
+
+function updateShootingStars(){
+  if (!starFx) return;
+  // Anchor at the central star (its projected position in 3D, else screen center).
+  let ax = cx, ay = cy;
+  if (root && root.children !== undefined) {
+    if (isFinite(root.cartX)) ax = root.cartX;
+    if (isFinite(root.cartY)) ay = root.cartY;
+  }
+  const maxReach = Math.hypot(W, H) * 0.75;
+
+  for (let i = shootingStars.length - 1; i >= 0; i--) {
+    const s = shootingStars[i];
+    s.r  += s.speed;
+    s.op -= 0.014;
+    if (s.op <= 0 || s.r > maxReach) shootingStars.splice(i, 1);
+  }
+
+  const sel = starFx.selectAll('line.shoot').data(shootingStars, d => d.id);
+  sel.enter().append('line')
+      .attr('class', 'shoot')
+      .attr('stroke', '#fff7d6')
+      .attr('stroke-linecap', 'round')
+    .merge(sel)
+      .attr('x1', d => ax + Math.cos(d.ang) * Math.max(0, d.r - d.len))
+      .attr('y1', d => ay + Math.sin(d.ang) * Math.max(0, d.r - d.len))
+      .attr('x2', d => ax + Math.cos(d.ang) * d.r)
+      .attr('y2', d => ay + Math.sin(d.ang) * d.r)
+      .attr('stroke-width', d => 1.4 + 2.6 * d.op)
+      .attr('stroke-opacity', d => d.op);
+  sel.exit().remove();
 }
 
 function onLevelSlide(val) {
@@ -942,6 +1030,22 @@ function toggle8Bit(){
   if (root) {
     if (is3DOn) project3D();
     else { redrawLinksFast(); update(root); }   // refresh link shapes (curved ↔ straight)
+  }
+}
+
+function toggleBpmStars(){
+  bpmStarsOn = !bpmStarsOn;
+  const btn = document.getElementById('bpmStarsBtn');
+  if (bpmStarsOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#fff7d6';
+    btn.style.borderColor = '#fff7d6';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    shootingStars = [];
+    if (starFx) starFx.selectAll('line.shoot').remove();
   }
 }
 
@@ -1181,9 +1285,6 @@ function drawPovGround(){
   povGround.select('.pov-floor')
     .attr('y', horizonY)
     .attr('height', Math.max(0, H * 2 - horizonY));
-  povGround.select('.pov-horizon')
-    .attr('cx', cx).attr('cy', horizonY)
-    .attr('rx', W).attr('ry', 70 + audioLevel * 60);
 }
 
 // Combined zoom + audio shake applied to the whole scene (covers 2D and 3D).
@@ -1374,27 +1475,17 @@ const mapLayer = g.append('g').attr('id', 'mapLayer');
 
 const defs = svg.append('defs');
 
-// POV platform: a vast glowing floor (the star's surface) that recedes to a
-// horizon, plus a bright horizon glow band. Sits behind everything in screen space.
+// POV platform: a subtle dark floor that fades downward, just enough to give a
+// sense of ground without a distracting bright horizon.
 const groundGrad = defs.append('linearGradient')
   .attr('id', 'groundGrad').attr('x1', '0').attr('y1', '0').attr('x2', '0').attr('y2', '1');
-groundGrad.append('stop').attr('offset', '0%').attr('stop-color', '#ffd700').attr('stop-opacity', 0.55);
-groundGrad.append('stop').attr('offset', '8%').attr('stop-color', '#ffb347').attr('stop-opacity', 0.28);
-groundGrad.append('stop').attr('offset', '45%').attr('stop-color', '#3a2410').attr('stop-opacity', 0.8);
-groundGrad.append('stop').attr('offset', '100%').attr('stop-color', '#050309').attr('stop-opacity', 0.97);
-
-const horizonGrad = defs.append('radialGradient')
-  .attr('id', 'horizonGrad').attr('cx', '50%').attr('cy', '50%').attr('r', '50%');
-horizonGrad.append('stop').attr('offset', '0%').attr('stop-color', '#fff7d6').attr('stop-opacity', 0.9);
-horizonGrad.append('stop').attr('offset', '35%').attr('stop-color', '#ffd700').attr('stop-opacity', 0.5);
-horizonGrad.append('stop').attr('offset', '100%').attr('stop-color', '#ffd700').attr('stop-opacity', 0);
+groundGrad.append('stop').attr('offset', '0%').attr('stop-color', '#0a0c14').attr('stop-opacity', 0.0);
+groundGrad.append('stop').attr('offset', '14%').attr('stop-color', '#0a0c14').attr('stop-opacity', 0.45);
+groundGrad.append('stop').attr('offset', '100%').attr('stop-color', '#04050a').attr('stop-opacity', 0.95);
 
 povGround = svg.append('g').attr('id', 'povGround').style('display', 'none');
 povGround.append('rect').attr('class', 'pov-floor')
   .attr('x', 0).attr('width', W).attr('y', cy).attr('height', H).attr('fill', 'url(#groundGrad)');
-povGround.append('ellipse').attr('class', 'pov-horizon')
-  .attr('cx', cx).attr('cy', cy).attr('rx', W).attr('ry', 70)
-  .attr('fill', 'url(#horizonGrad)').style('mix-blend-mode', 'screen');
 povGround.lower();   // behind the node/link layer
 
 const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
@@ -1458,6 +1549,7 @@ staticFilter.append('feDisplacementMap')
 
 const LG = mapLayer.append('g');
 const NG = mapLayer.append('g');
+starFx = g.append('g').attr('id', 'starFx').style('pointer-events', 'none');
 
 let tipTimeout;
 const tipEl = document.getElementById('tip');
@@ -1536,40 +1628,48 @@ function linkPath(s, t) {
   let bow = len * 0.08;
 
   if (isSpectrumOn) {
-    const segments = 14;
-    let path = `M${s.cartX},${s.cartY}`;
-    const phase = globalTime * 0.005 * spectrumSpeed;
+    // Trace the song's actual (smoothed) spectrum along the link: each ring shows
+    // a band of frequencies, so different songs read like different "voices".
+    const segments = 28;
     const angle = Math.atan2(dy, dx);
-    const freq = 3;
-    let audioAmp = 0;
-    
-    if (isAudioPlaying && dataArray) {
-        let safeDepth = Math.max(1, maxDepth);
-        let binIndex = Math.floor((s.depth / safeDepth) * (dataArray.length * 0.6));
-        binIndex = Math.min(binIndex, dataArray.length - 1);
-        let freqVal = dataArray[binIndex] || 0;
-        audioAmp = (freqVal / 255) * 20; 
-    }
+    const phase = globalTime * 0.004 * spectrumSpeed;
+    const fLen  = (specSmooth && specSmooth.length) ? specSmooth.length : 64;
+    const safeDepth = Math.max(1, maxDepth);
+    const startBin  = Math.floor((s.depth / safeDepth) * fLen * 0.45);
+    const winBins   = Math.max(6, Math.floor(fLen * 0.22));
 
-    const amp = 12 + audioAmp;
+    let path = `M${s.cartX},${s.cartY}`;
+    let prevX = s.cartX, prevY = s.cartY;
 
     for (let i = 1; i <= segments; i++) {
       const pct = i / segments;
-      const cx_ctrl = mx - dy/len*bow;
-      const cy_ctrl = my + dx/len*bow;
+      const baseX = s.cartX + dx * pct;
+      const baseY = s.cartY + dy * pct;
 
-      const omt = 1 - pct;
-      const baseX = omt * omt * s.cartX + 2 * omt * pct * cx_ctrl + pct * pct * t.cartX;
-      const baseY = omt * omt * s.cartY + 2 * omt * pct * cy_ctrl + pct * pct * t.cartY;
+      // Spectrum amplitude sampled across the band (interpolated between bins).
+      let amp = 4;                                       // gentle idle shimmer
+      if (specSmooth) {
+        const fpos = startBin + pct * winBins;
+        const b0 = Math.min(fLen - 1, Math.floor(fpos));
+        const b1 = Math.min(fLen - 1, b0 + 1);
+        const fr = fpos - b0;
+        const val = specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr;
+        amp += val * 60;                                 // more energy
+      }
 
-      const edgeTaper = Math.sin(pct * Math.PI);
-      const waveOffset = Math.sin(pct * freq * Math.PI * 2 - phase) * amp * edgeTaper;
+      const taper = Math.sin(pct * Math.PI);             // anchored at both ends
+      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 2 - phase); // travelling shimmer
+      const off   = amp * taper * flow;
 
-      const perpX = -Math.sin(angle) * waveOffset;
-      const perpY = Math.cos(angle) * waveOffset;
+      let px = baseX - Math.sin(angle) * off;
+      let py = baseY + Math.cos(angle) * off;
 
-      path += ` L${baseX + perpX},${baseY + perpY}`;
+      // Smooth the polyline with a quadratic through the midpoint of each step.
+      const mxs = (prevX + px) / 2, mys = (prevY + py) / 2;
+      path += ` Q${prevX},${prevY} ${mxs},${mys}`;
+      prevX = px; prevY = py;
     }
+    path += ` L${t.cartX},${t.cartY}`;
     return path;
   }
 
