@@ -145,6 +145,16 @@
 </head>
 <body>
 <div id="cv"></div>
+
+<svg width="0" height="0" style="position:absolute; z-index:-1;">
+  <defs>
+    <filter id="tvStatic" x="-50%" y="-50%" width="200%" height="200%">
+      <feTurbulence id="noiseGen" type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="0" result="noise"></feTurbulence>
+      <feDisplacementMap id="glitchDisplacement" in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </defs>
+</svg>
+
 <div id="crt"></div>
 <div id="welcome">Ready to fetch data.<br>Drag an MP3 or Listen to Tab to play audio.</div>
 
@@ -163,7 +173,6 @@
   <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1"
          oninput="updateVolume(this.value)" style="opacity:0.8;margin-bottom:4px;display:none;accent-color:#cc00ff;" class="audio-control">
 
-  <!-- ===== Layout & Depth ===== -->
   <div class="folder">
     <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">Layout & Depth</span><span class="chev">▾</span>
@@ -183,7 +192,6 @@
     </div>
   </div>
 
-  <!-- ===== Glow & Noise ===== -->
   <div class="folder">
     <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">Glow & Noise</span><span class="chev">▾</span>
@@ -211,7 +219,6 @@
     </div>
   </div>
 
-  <!-- ===== Audio Reactive ===== -->
   <div class="folder collapsed">
     <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">Audio Reactive</span><span class="chev">▾</span>
@@ -274,7 +281,6 @@
     </div>
   </div>
 
-  <!-- ===== Motion ===== -->
   <div class="folder collapsed">
     <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">Motion</span><span class="chev">▾</span>
@@ -294,7 +300,6 @@
     </div>
   </div>
 
-  <!-- ===== 3D Galaxy ===== -->
   <div class="folder collapsed">
     <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">3D Galaxy</span><span class="chev">▾</span>
@@ -344,7 +349,6 @@
     </div>
   </div>
 
-  <!-- ===== Display ===== -->
   <div class="folder collapsed">
     <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">Display</span><span class="chev">▾</span>
@@ -397,9 +401,9 @@ let draggedNode = null;
 let depthFreqs = [];
 let hasAudioData = false;
 
-let allNodes = [];   // cached root.descendants() — rebuilt only in update()
-let allLinks = [];   // cached root.links()
-let _sorted  = null; // reusable z-sort buffer for 3D
+let allNodes = [];
+let allLinks = [];
+let _sorted  = null;
 
 let globalTime    = 0;
 let glowMode      = 'manual';
@@ -453,9 +457,9 @@ let centerRings   = [];
 let ringEnvPrev   = 0;
 let ringCooldown  = 0;
 
-let ripples       = [];   // gold audio ripples from the root (audio glow mode)
-let glitchAmt     = 0;    // 0..1, drives the tv-static / glitch distortion on auras
-let noiseAmount   = 1;    // user multiplier for the noise/glitch intensity
+let ripples       = [];
+let glitchAmt     = 0;
+let noiseAmount   = 1;
 
 let audioCtx = null;
 let analyser = null;
@@ -888,68 +892,13 @@ function bcolor(d) { if (d.id === 'root') return '#ffd700'; let c = d; while (c.
 function nodeR(d) { if (d.id === 'root') return 34; const g1 = d.data.g1 || 0; if (g1 >= 10) return 22; if (g1 >= 7) return 18; if (g1 >= 4) return 14; if (g1 >= 1) return 11; return 7; }
 const RADII = [0, 160, 340, 520, 700, 880, 1060];
 
-// ---- Aesthetic helpers: recreate the SVG <defs> gradients in canvas ----
 function colA(c, a) { const cc = d3.color(c); if (!cc) return c; cc.opacity = a; return cc + ''; }
 function darker(c, k) { const cc = d3.color(c); return cc ? darkerStr(cc, k) : c; }
 function darkerStr(cc, k) { const d = cc.darker(k); return d + ''; }
 
-// Cached canvas gradients. Defined at the origin so they can be reused for
-// every node of the same colour by translate()+scale()-ing the context.
 const AURA_REF = 100, SPHERE_REF = 50;
 const _auraGrad = {}, _sphereGrad = {};
 
-// Smooth, tileable fractal-noise tile (multi-octave value noise) built ONCE.
-// This is the canvas stand-in for the SVG feTurbulence field — cloudy and
-// low-frequency, NOT per-pixel static. It's used two ways in Audio glow mode:
-// (1) to warp the aura outline (the feDisplacementMap analog), and
-// (2) as a gentle cloudy modulation clipped to the aura.
-const NOISE = 160;
-const noiseCv = document.createElement('canvas');
-noiseCv.width = NOISE; noiseCv.height = NOISE;
-const noiseCtx = noiseCv.getContext('2d');
-(function buildFractalNoise() {
-  function lattice(p) { const g = new Float32Array(p * p); for (let i = 0; i < g.length; i++) g[i] = Math.random(); return { g, p }; }
-  function smp(l, u, v) {
-    const fx = u * l.p, fy = v * l.p;
-    const x0 = ((fx | 0) % l.p + l.p) % l.p, y0 = ((fy | 0) % l.p + l.p) % l.p;
-    const x1 = (x0 + 1) % l.p, y1 = (y0 + 1) % l.p;
-    let tx = fx - Math.floor(fx), ty = fy - Math.floor(fy);
-    tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);   // smoothstep
-    const a = l.g[y0 * l.p + x0], b = l.g[y0 * l.p + x1], c = l.g[y1 * l.p + x0], d = l.g[y1 * l.p + x1];
-    return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
-  }
-  // High-frequency octaves => fine grain (the feTurbulence baseFrequency≈0.9 look),
-  // weighted toward the finest octave so it reads as TEXTURE, not soft clouds.
-  const oct = [lattice(40), lattice(80), lattice(160)], amp = [0.3, 0.35, 0.35];
-  const max = amp[0] + amp[1] + amp[2];
-  const img = noiseCtx.createImageData(NOISE, NOISE), dd = img.data;
-  for (let y = 0; y < NOISE; y++) for (let x = 0; x < NOISE; x++) {
-    const u = x / NOISE, v = y / NOISE;
-    let n = 0; for (let o = 0; o < 3; o++) n += smp(oct[o], u, v) * amp[o];
-    n = n / max;
-    n = (n - 0.5) * 1.5 + 0.5;                  // boost contrast so the grain is punchy
-    const val = Math.max(0, Math.min(255, (n * 255) | 0));
-    const i = (y * NOISE + x) * 4;
-    dd[i] = dd[i + 1] = dd[i + 2] = val; dd[i + 3] = 255;
-  }
-  noiseCtx.putImageData(img, 0, 0);
-})();
-
-// A wobbling, turbulent ring path centred at the origin — warps the aura edge
-// (the displacement effect). amp 0 → a clean circle.
-function traceWobble(R, amp, t) {
-  if (amp <= 0.001) { ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); return; }
-  const N = 30;
-  ctx.beginPath();
-  for (let i = 0; i <= N; i++) {
-    const a = i / N * Math.PI * 2;
-    const w = Math.sin(a * 3 + t * 0.006) * 0.5 + Math.sin(a * 5 - t * 0.009) * 0.32 + Math.sin(a * 8 + t * 0.014) * 0.2;
-    const rr = R * (1 + w * amp);
-    const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-}
 function auraGrad(c) {
   if (_auraGrad[c]) return _auraGrad[c];
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, AURA_REF);
@@ -959,9 +908,10 @@ function auraGrad(c) {
   g.addColorStop(1,    colA(c, 0));
   _auraGrad[c] = g; return g;
 }
+
 function sphereGrad(c) {
   if (_sphereGrad[c]) return _sphereGrad[c];
-  const hx = -0.30 * SPHERE_REF, hy = -0.30 * SPHERE_REF; // top-left highlight
+  const hx = -0.30 * SPHERE_REF, hy = -0.30 * SPHERE_REF; 
   const g = ctx.createRadialGradient(hx, hy, 0, 0, 0, SPHERE_REF);
   g.addColorStop(0,   'rgba(255,255,255,0.85)');
   g.addColorStop(0.2, c);
@@ -969,7 +919,6 @@ function sphereGrad(c) {
   _sphereGrad[c] = g; return g;
 }
 
-// Glossy 3D-sphere fill for a node body.
 function fillSphere(c, x, y, r) {
   ctx.save();
   ctx.translate(x, y);
@@ -979,40 +928,26 @@ function fillSphere(c, x, y, r) {
   ctx.restore();
 }
 
-// Soft colored halo behind a node (replaces the crude shadowBlur glow).
-// In Audio glow mode the halo also gets a tv-static grain — but clipped to the
-// aura disk itself, so the noise lives on the auras and nowhere else.
 function drawAura(c, x, y, auraR, alpha, glitch) {
   if (alpha <= 0.01 || auraR <= 0) return;
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
   ctx.translate(x, y);
-  const s = auraR / AURA_REF; ctx.scale(s, s);
+  const s = auraR / AURA_REF; 
+  ctx.scale(s, s);
 
-  const k = zoomT.k || 1;
-  const t = globalTime;
-  const wob = (glitch > 0.02 && auraR * k > 5) ? Math.min(0.42, glitch * 0.4) : 0;
+  if (glitch > 0.02) {
+    ctx.filter = 'url(#tvStatic)';
+  }
 
-  // warped (or clean) halo edge, then fill with the gradient
-  traceWobble(AURA_REF, wob, t);
   ctx.fillStyle = auraGrad(c);
+  ctx.beginPath(); 
+  ctx.arc(0, 0, AURA_REF, 0, Math.PI * 2); 
   ctx.fill();
 
-  // fine grain texture, clipped to the same warped halo
-  if (wob > 0) {
-    ctx.clip();                                  // reuse current path as clip
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = Math.min(0.85, 0.35 + glitch * 0.55);
-    ctx.imageSmoothingEnabled = false;           // crisp grain (this is the texture)
-    const span = AURA_REF * 2.4;                 // slight upscale → fine, crisp grain
-    const ox2 = -AURA_REF * 1.2 + Math.sin(t * 0.0007) * AURA_REF * 0.18;  // slow drift
-    const oy2 = -AURA_REF * 1.2 + Math.cos(t * 0.0009) * AURA_REF * 0.18;
-    ctx.drawImage(noiseCv, ox2, oy2, span, span);
-  }
   ctx.restore();
 }
 
-// Trace a star path on the current context (used for the root node).
 function traceStar(x, y, spikes, outer, inner) {
   let rot = Math.PI / 2 * 3; const step = Math.PI / spikes;
   ctx.beginPath();
@@ -1063,12 +998,12 @@ function update(source) {
     if (d.data.ox != null) { d.cartX = d.data.ox; d.cartY = d.data.oy; }
     else { d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2); d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2); }
     d.cartX0 = d.cartX; d.cartY0 = d.cartY;
-    d._col = bcolor(d);      // cache colour (avoids parent-walk every frame)
-    d._r   = nodeR(d);       // cache radius
+    d._col = bcolor(d);      
+    d._r   = nodeR(d);       
   });
   allNodes = nodes;
   allLinks = root.links();
-  _sorted  = null;          // node set changed → invalidate z-sort buffer
+  _sorted  = null;          
   simulationTree = d3.quadtree().x(d => d.cartX).y(d => d.cartY).addAll(nodes);
   if (isFloatOn && floatSim) { floatSim.nodes(nodes); floatSim.alpha(0.5).restart(); }
 }
@@ -1093,7 +1028,7 @@ function project3D(nodes, maxR) {
     d._z3 = z2; d._persp = persp; d._vis3 = true;
     if (z2 < zmin) zmin = z2; if (z2 > zmax) zmax = z2;
   });
-  const zr = (zmax - zmin) || 1;                       // depth cue: far = dimmer
+  const zr = (zmax - zmin) || 1;                       
   nodes.forEach(d => { d._op3 = 0.35 + 0.65 * ((d._z3 - zmin) / zr); });
 }
 
@@ -1132,7 +1067,6 @@ function renderCanvas() {
   const links = allLinks;
   const k = zoomT.k || 1;
 
-  // Hover quadtree only needs rebuilding while things move — throttle it.
   if ((isFloatOn || is3DOn || isSpinOn || isDiffSpinOn) && (_frame % 2 === 0)) {
     simulationTree = d3.quadtree().x(d => d.cartX).y(d => d.cartY).addAll(nodes.filter(n => !is3DOn || n._vis3));
   }
@@ -1147,10 +1081,7 @@ function renderCanvas() {
     ctx.translate(cx, cy); ctx.rotate(mapAngle * Math.PI / 180); ctx.translate(-cx, -cy);
   }
 
-  // ---- Viewport culling bounds (in the same coords as d.cartX/d.cartY) ----
-  // Anything outside these bounds is off-screen and skipped entirely, which is
-  // what lets deep trees stay smooth when zoomed in.
-  const CULL_M = 220; // margin big enough to cover auras + labels
+  const CULL_M = 220; 
   let cMinX, cMaxX, cMinY, cMaxY;
   if (is3DOn) {
     cMinX = (0 - zoomT.x) / k; cMaxX = (W - zoomT.x) / k;
@@ -1169,7 +1100,6 @@ function renderCanvas() {
   }
   cMinX -= CULL_M; cMaxX += CULL_M; cMinY -= CULL_M; cMaxY += CULL_M;
 
-  // ---- POV ground: mirrored starfield reflection + fading floor ----
   if (is3DOn && povMode) {
     const horizonScreen = cy - focal3d * Math.tan(lookPitch);
     const hy = (horizonScreen - zoomT.y) / zoomT.k;
@@ -1189,7 +1119,6 @@ function renderCanvas() {
     ctx.fillRect(-W * 2 / zoomT.k, hy, W * 5 / zoomT.k, span);
   }
 
-  // ---- Links: colored per branch, opacity driven by glow / audio ----
   let linkAlpha;
   if (isReactLinksOn)            linkAlpha = 0.2 + smoothedEnergy * 0.8;
   else if (glowMode === 'manual') linkAlpha = 0.15 + manualGlowVal * 0.15;
@@ -1201,7 +1130,6 @@ function renderCanvas() {
     const s = link.source, t = link.target;
     if (is3DOn && (!s._vis3 || !t._vis3)) return;
     let sx = s.cartX, sy = s.cartY, tx = t.cartX, ty = t.cartY;
-    // cull links whose both endpoints are off-screen
     const sIn = sx >= cMinX && sx <= cMaxX && sy >= cMinY && sy <= cMaxY;
     const tIn = tx >= cMinX && tx <= cMaxX && ty >= cMinY && ty <= cMaxY;
     if (!sIn && !tIn) return;
@@ -1235,19 +1163,17 @@ function renderCanvas() {
   let drawNodes;
   if (is3DOn) {
     if (!_sorted || _sorted.length !== nodes.length) _sorted = nodes.slice();
-    if ((_frame & 3) === 0) _sorted.sort((a, b) => (a._z3 || 0) - (b._z3 || 0)); // re-sort every 4th frame
+    if ((_frame & 3) === 0) _sorted.sort((a, b) => (a._z3 || 0) - (b._z3 || 0)); 
     drawNodes = _sorted;
   } else drawNodes = nodes;
 
   drawNodes.forEach(d => {
     if (is3DOn && !d._vis3) return;
-    // viewport cull — skip everything off-screen
     if (d.cartX < cMinX || d.cartX > cMaxX || d.cartY < cMinY || d.cartY > cMaxY) return;
 
     const c = d._col;
     const scale = is3DOn && d._persp ? d._persp : 1;
 
-    // focus pulse (rank-panel click) — damped bounce
     let pulse = 1;
     if (d._pulseStart != null) {
       const el = globalTime - d._pulseStart;
@@ -1258,11 +1184,10 @@ function renderCanvas() {
     const baseR = d._r * scale;
     const audioBump = (hasAudioData && depthFreqs[d.depth]) ? depthFreqs[d.depth] * 0.3 : 0;
     const finalRadius = baseR * (1 + audioBump) * pulse;
-    const screenR = finalRadius * k;               // on-screen size for LOD decisions
+    const screenR = finalRadius * k;               
 
     const nodeAlpha = is3DOn ? (d._op3 != null ? d._op3 : 1) : 1;
 
-    // ---- aura halo (skip when it would be sub-pixel) ----
     if (!is8Bit) {
       let ai = 0;
       if (glowMode === 'manual') ai = manualGlowVal;
@@ -1276,9 +1201,8 @@ function renderCanvas() {
     }
 
     ctx.globalAlpha = nodeAlpha;
-    ctx.shadowBlur = 0;   // glow comes from the aura, not per-node shadows (big perf win)
+    ctx.shadowBlur = 0;   
 
-    // ---- node body ----
     if (d.id === 'root') {
       traceStar(d.cartX, d.cartY, 7, finalRadius * 1.4, finalRadius * 0.6);
       ctx.fillStyle = '#ffd700'; ctx.fill();
@@ -1303,7 +1227,6 @@ function renderCanvas() {
       ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius, 0, Math.PI * 2);
       ctx.strokeStyle = c; ctx.lineWidth = 1.5 * scale; ctx.stroke();
     } else {
-      // faint translucent ancestors
       ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius, 0, Math.PI * 2);
       ctx.save();
       ctx.globalAlpha = nodeAlpha * (is8Bit ? 1 : Math.min(0.9, 0.25 + manualGlowVal * 0.12 + audioBump));
@@ -1314,9 +1237,8 @@ function renderCanvas() {
 
     ctx.shadowBlur = 0;
 
-    // ---- labels with glow (LOD: skip when too small to read) ----
     const showLabel = is8Bit || screenR > 4;
-    const glowText  = !is8Bit && screenR > 9;   // only blur labels once they're big enough to notice
+    const glowText  = !is8Bit && screenR > 9;   
     if (showLabel) {
       ctx.textAlign = 'center';
       if (glowText && d.data.g1 > 0) { ctx.shadowColor = c; ctx.shadowBlur = 10 * scale; }
@@ -1344,13 +1266,18 @@ function renderCanvas() {
   let ax = root ? root.cartX : cx, ay = root ? root.cartY : cy;
   if (!is3DOn) {
     ctx.shadowBlur = 0;
-    // gold audio ripples (audio glow mode)
     ripples.forEach(rp => {
       ctx.beginPath(); ctx.arc(ax, ay, rp.r, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffd700'; ctx.lineWidth = rp.w * Math.max(0.3, rp.op);
       ctx.globalAlpha = Math.min(1, Math.max(0, rp.op));
-      if (!is8Bit) { ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 8 * rp.op; }
-      ctx.stroke(); ctx.shadowBlur = 0;
+      if (!is8Bit) { 
+        ctx.shadowColor = '#ffd700'; 
+        ctx.shadowBlur = 8 * rp.op; 
+        if (glowMode === 'audio') ctx.filter = 'url(#tvStatic)';
+      }
+      ctx.stroke(); 
+      ctx.shadowBlur = 0;
+      ctx.filter = 'none';
     });
     ctx.globalAlpha = 1.0;
     shootingStars.forEach(s => {
@@ -1413,11 +1340,15 @@ d3.timer(elapsed => {
       ringEnvPrev = smoothedEnergy;
     }
 
-    // Audio glow mode: gold ripples off the root + tv-static glitch on the auras.
     if (glowMode === 'audio' && !is8Bit) {
       glitchAmt = Math.min(1.5, smoothedEnergy * manualGlowVal * noiseAmount);
+      d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
+      d3.select('#glitchDisplacement').attr('scale', smoothedEnergy * 100 * manualGlowVal * noiseAmount);
       if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) spawnRipple(smoothedEnergy);
-    } else { glitchAmt *= 0.8; }
+    } else { 
+      glitchAmt *= 0.8; 
+      d3.select('#glitchDisplacement').attr('scale', glitchAmt * 100);
+    }
 
     if (isShakeOn) {
       const transient = Math.max(0, rawLevel - shakeEnergy);
@@ -1440,6 +1371,7 @@ d3.timer(elapsed => {
     shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; audioLevel *= 0.9; smoothedEnergy *= 0.9;
     depthFreqs = [];
     glitchAmt *= 0.8;
+    d3.select('#glitchDisplacement').attr('scale', glitchAmt * 100);
   }
 
   for (let i = ripples.length - 1; i >= 0; i--) {
