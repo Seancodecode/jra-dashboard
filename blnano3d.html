@@ -336,6 +336,7 @@ let simulationTree = null;
 let hoveredNode = null;
 let draggedNode = null;
 let depthFreqs = [];
+let hasAudioData = false;
 
 let globalTime    = 0;
 let glowMode      = 'manual';
@@ -381,8 +382,6 @@ let _frame        = 0;
 let specSmooth    = null;
 
 let bpmStarsOn    = true;
-let beatAvg       = 0;
-let bassPrev      = 0;
 let shootingStars = [];
 let starSpeedMul  = 1.5;
 
@@ -936,15 +935,18 @@ function renderCanvas() {
     ctx.translate(cx, cy); ctx.rotate(mapAngle * Math.PI / 180); ctx.translate(-cx, -cy);
   }
 
+  // Draw links with optional neon glow
   ctx.lineWidth = isReactLinksOn ? 2 + smoothedEnergy * 10 : 2.5;
   ctx.strokeStyle = `rgba(255, 255, 255, ${isReactLinksOn ? 0.2 + smoothedEnergy * 0.8 : 0.15})`;
+  ctx.shadowBlur = (!is8Bit && isReactLinksOn) ? (10 + smoothedEnergy * 20) : 0;
+  ctx.shadowColor = '#ffffff';
   
   links.forEach(link => {
     if (is3DOn && (!link.source._vis3 || !link.target._vis3)) return;
     let sx = link.source.cartX, sy = link.source.cartY;
     let tx = link.target.cartX, ty = link.target.cartY;
     if (isSpectrumOn && specSmooth && !is3DOn && !is8Bit) {
-      const dx = tx - sx, dy = ty - sy; const len = Math.sqrt(dx*dx + dy*dy) || 1;
+      const dx = tx - sx, dy = ty - sy;
       const angle = Math.atan2(dy, dx);
       ctx.beginPath(); ctx.moveTo(sx, sy);
       for (let i = 1; i < 24; i++) {
@@ -974,9 +976,13 @@ function renderCanvas() {
     let baseR = nodeR(d) * scale;
     let finalRadius = baseR * (1 + (hasAudioData && depthFreqs[d.depth] ? depthFreqs[d.depth] * 0.3 : 0));
 
-    if (glowMode === 'manual' && manualGlowVal > 0 && !is8Bit) {
-        ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius * (1 + manualGlowVal * 0.3), 0, Math.PI * 2);
-        ctx.fillStyle = bcolor(d); ctx.globalAlpha = manualGlowVal * 0.15; ctx.fill(); ctx.globalAlpha = 1.0;
+    // Restore the glowing aura using canvas shadows
+    if (!is8Bit && (glowMode === 'manual' || hasAudioData)) {
+        let intensity = glowMode === 'manual' ? manualGlowVal * 25 : depthFreqs[d.depth] * 40;
+        ctx.shadowBlur = intensity;
+        ctx.shadowColor = bcolor(d);
+    } else {
+        ctx.shadowBlur = 0;
     }
 
     ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius, 0, Math.PI * 2);
@@ -995,6 +1001,9 @@ function renderCanvas() {
       } else { ctx.fillStyle = '#1a1a26'; ctx.fill(); ctx.strokeStyle = bcolor(d); ctx.stroke(); }
     }
 
+    // Reset shadow so text doesn't look blurry
+    ctx.shadowBlur = 0;
+
     ctx.fillStyle = d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)';
     ctx.font = `${d.data.g1 >= 5 ? 800 : 600} ${is8Bit ? 11 : 11 * scale}px ${is8Bit ? 'monospace' : 'system-ui'}`;
     ctx.textAlign = 'center';
@@ -1012,6 +1021,7 @@ function renderCanvas() {
 
   let ax = root ? root.cartX : cx, ay = root ? root.cartY : cy;
   if (!is3DOn) {
+    ctx.shadowBlur = 0;
     shootingStars.forEach(s => {
       ctx.beginPath();
       ctx.moveTo(ax + Math.cos(s.ang) * Math.max(0, s.r - s.len), ay + Math.sin(s.ang) * Math.max(0, s.r - s.len));
@@ -1035,7 +1045,7 @@ d3.timer(elapsed => {
 
   if (isSpinOn && !is3DOn) mapAngle += spinSpeed * 0.2;
 
-  let hasAudioData = false;
+  hasAudioData = false;
   if (isAudioPlaying && analyser) {
     analyser.getByteFrequencyData(dataArray);
     hasAudioData = true;
