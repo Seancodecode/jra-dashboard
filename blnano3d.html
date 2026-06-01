@@ -8,7 +8,22 @@
   #cv{width:100%;height:100vh;}
   canvas { display: block; }
 
-  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:175px;}
+  .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:185px;
+    max-height:calc(100vh - 20px);overflow-y:auto;padding-right:2px;}
+  .ctrls::-webkit-scrollbar{width:4px;}
+  .ctrls::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:2px;}
+
+  .folder{background:rgba(10,10,15,0.85);border:1px solid rgba(255,255,255,0.1);
+    border-radius:6px;backdrop-filter:blur(8px);overflow:hidden;flex-shrink:0;}
+  .folder-head{display:flex;justify-content:space-between;align-items:center;
+    padding:8px 10px;cursor:pointer;user-select:none;transition:background .15s;}
+  .folder-head:hover{background:rgba(255,255,255,0.05);}
+  .folder-title{font-size:9px;color:rgba(255,255,255,0.6);font-family:monospace;
+    text-transform:uppercase;letter-spacing:1.5px;}
+  .folder .chev{font-size:9px;color:rgba(255,255,255,0.4);transition:transform .2s;}
+  .folder.collapsed .chev{transform:rotate(-90deg);}
+  .folder-body{padding:2px 10px 9px;}
+  .folder.collapsed .folder-body{display:none;}
   .btn{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:monospace;
     background:rgba(15,15,22,0.92);border:1px solid rgba(255,255,255,0.12);border-radius:6px;
     padding:6px 12px;color:rgba(255,255,255,0.45);cursor:pointer;transition:all .2s;text-align:center;}
@@ -140,160 +155,204 @@
   <button class="btn" onclick="resetTree()">Reset View</button>
   <button class="btn tab-btn" id="tabAudioBtn" onclick="captureTabAudio()">Listen to Tab</button>
   <button class="btn audio-btn" id="stopAudioBtn" onclick="stopAudio()">Stop Audio</button>
-  
+
   <div class="ctrl-row audio-control" style="display:none;" id="volumeContainer">
     <span class="ctrl-label" style="text-transform:none;font-size:10px;">Local Volume</span>
     <span class="ctrl-val" id="volVal">100%</span>
   </div>
   <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1"
-         oninput="updateVolume(this.value)" style="opacity:0.8;margin-bottom:8px;display:none;accent-color:#cc00ff;" class="audio-control">
+         oninput="updateVolume(this.value)" style="opacity:0.8;margin-bottom:4px;display:none;accent-color:#cc00ff;" class="audio-control">
 
-  <div class="ctrl-box">
-    <div class="ctrl-row">
-      <span class="ctrl-label">Depth Limit</span>
-      <span class="ctrl-val" id="levelVal">0 / 0</span>
+  <!-- ===== Layout & Depth ===== -->
+  <div class="folder">
+    <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">Layout & Depth</span><span class="chev">▾</span>
     </div>
-    <input type="range" id="levelSlider" min="0" max="10" step="1" value="0"
-           oninput="onLevelSlide(this.value)" style="accent-color:#d4af37;">
+    <div class="folder-body">
+      <div class="ctrl-row">
+        <span class="ctrl-label">Depth Limit</span>
+        <span class="ctrl-val" id="levelVal">0 / 0</span>
+      </div>
+      <input type="range" id="levelSlider" min="0" max="10" step="1" value="0"
+             oninput="onLevelSlide(this.value)" style="accent-color:#d4af37;margin-bottom:8px;">
+      <div class="ctrl-row">
+        <span class="ctrl-label">Ring Spread</span>
+        <span class="ctrl-val" id="spreadVal">1.0x</span>
+      </div>
+      <input type="range" min="0.5" max="3" step="0.1" value="1" oninput="updateSpacing(this.value)">
+    </div>
   </div>
 
-  <div class="ctrl-box">
-    <div class="ctrl-row">
-      <span class="ctrl-label">Ring Spread</span>
-      <span class="ctrl-val" id="spreadVal">1.0x</span>
+  <!-- ===== Glow & Noise ===== -->
+  <div class="folder">
+    <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">Glow & Noise</span><span class="chev">▾</span>
     </div>
-    <input type="range" min="0.5" max="3" step="0.1" value="1"
-           oninput="updateSpacing(this.value)">
+    <div class="folder-body">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Glow Mode</span>
+        <button class="btn" id="glowModeBtn" onclick="toggleGlowMode()" style="padding:2px 6px;font-size:8px;">MANUAL</button>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="glowLabel">Intensity</span>
+        <span class="ctrl-val" id="glowVal">1.0x</span>
+      </div>
+      <input type="range" id="glowSlider" min="0" max="4.0" step="0.1" value="1.0"
+             oninput="updateGlowSlider(this.value)" style="opacity:0.8;margin-bottom:10px;">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Noise Amount</span>
+        <span class="ctrl-val" id="noiseVal">1.00x</span>
+      </div>
+      <input type="range" id="noiseSlider" min="0" max="2" step="0.05" value="1"
+             oninput="setNoiseAmount(this.value)" style="opacity:0.8;margin-bottom:4px;">
+      <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;">
+        TV-STATIC GRAIN · AUDIO GLOW MODE
+      </div>
+    </div>
   </div>
 
-  <div class="ctrl-box">
-    <div class="ctrl-row" style="border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:5px;margin-bottom:8px;">
-      <span class="ctrl-label">Visuals & Animations</span>
+  <!-- ===== Audio Reactive ===== -->
+  <div class="folder collapsed">
+    <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">Audio Reactive</span><span class="chev">▾</span>
     </div>
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Glow Mode</span>
-      <button class="btn" id="glowModeBtn" onclick="toggleGlowMode()" style="padding:2px 6px;font-size:8px;">MANUAL</button>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="glowLabel">Intensity</span>
-      <span class="ctrl-val" id="glowVal">1.0x</span>
-    </div>
-    <input type="range" id="glowSlider" min="0" max="4.0" step="0.1" value="1.0"
-           oninput="updateGlowSlider(this.value)" style="opacity:0.8;margin-bottom:10px;">
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Spin Map</span>
-      <button class="btn" id="spinBtn" onclick="toggleSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-    <input type="range" id="spinSpeed" min="-5" max="5" step="0.1" value="1"
-           oninput="spinSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:10px;">
-    
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Reactive Strings</span>
-      <button class="btn" id="reactBtn" onclick="toggleReactLinks()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Waveform</span>
-      <button class="btn" id="spectrumBtn" onclick="toggleSpectrum()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-    <input type="range" id="spectrumSpeed" min="0.5" max="5" step="0.1" value="2"
-           oninput="spectrumSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Float & Bounce</span>
-      <button class="btn" id="floatBtn" onclick="toggleFloat()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Cam Shake</span>
-      <button class="btn" id="shakeBtn" onclick="toggleShake()" style="padding:2px 6px;font-size:8px;color:#cc00ff;border-color:#cc00ff;">ON</button>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Shake Sensitivity</span>
-      <span class="ctrl-val" id="shakeSensVal" style="color:#cc00ff;">0.5x</span>
-    </div>
-    <input type="range" id="shakeSensSlider" min="0.05" max="2" step="0.05" value="0.5"
-           oninput="setShakeSens(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#cc00ff;">
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Ring Spin</span>
-      <button class="btn" id="diffSpinBtn" onclick="toggleDiffSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-    <div id="diffSpinControls" style="display:none;">
+    <div class="folder-body">
       <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Ring Speed</span>
-        <span class="ctrl-val" id="diffSpinVal">1.0x</span>
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Reactive Strings</span>
+        <button class="btn" id="reactBtn" onclick="toggleReactLinks()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
-      <input type="range" id="diffSpinSlider" min="-4" max="4" step="0.1" value="1"
-             oninput="setDiffSpin(this.value)" style="opacity:0.8;margin-bottom:4px;">
-      <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-bottom:4px;">
-        PLAYS WITH AUDIO · OUTER RINGS FASTER
-      </div>
-    </div>
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">BPM Stars</span>
-      <button class="btn" id="bpmStarsBtn" onclick="toggleBpmStars()" style="padding:2px 6px;font-size:8px;color:#fff7d6;border-color:#fff7d6;">ON</button>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Star Speed</span>
-      <span class="ctrl-val" id="starSpeedVal" style="color:#fff7d6;">1.5x</span>
-    </div>
-    <input type="range" id="starSpeedSlider" min="0.3" max="5" step="0.1" value="1.5"
-           oninput="setStarSpeed(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#fff7d6;">
-
-    <div class="ctrl-row">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Center Rings</span>
-      <button class="btn" id="ringsBtn" onclick="toggleCenterRings()" style="padding:2px 6px;font-size:8px;color:#ffffff;border-color:#ffffff;">ON</button>
-    </div>
-
-    <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">8-Bit Mode</span>
-      <button class="btn" id="eightBitBtn" onclick="toggle8Bit()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-
-    <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
-      <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Galaxy</span>
-      <button class="btn" id="threeDBtn" onclick="toggle3D()" style="padding:2px 6px;font-size:8px;">OFF</button>
-    </div>
-
-    <div id="threeDControls" style="display:none;">
 
       <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;">POV · Stargaze</span>
-        <button class="btn" id="povBtn" onclick="togglePOV()" style="padding:2px 6px;font-size:8px;">OFF</button>
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Waveform</span>
+        <button class="btn" id="spectrumBtn" onclick="toggleSpectrum()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
+      <input type="range" id="spectrumSpeed" min="0.5" max="5" step="0.1" value="2"
+             oninput="spectrumSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
 
-      <div id="tiltControls">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Cam Shake</span>
+        <button class="btn" id="shakeBtn" onclick="toggleShake()" style="padding:2px 6px;font-size:8px;color:#cc00ff;border-color:#cc00ff;">ON</button>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Shake Sensitivity</span>
+        <span class="ctrl-val" id="shakeSensVal" style="color:#cc00ff;">0.5x</span>
+      </div>
+      <input type="range" id="shakeSensSlider" min="0.05" max="2" step="0.05" value="0.5"
+             oninput="setShakeSens(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#cc00ff;">
+
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Ring Spin</span>
+        <button class="btn" id="diffSpinBtn" onclick="toggleDiffSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      </div>
+      <div id="diffSpinControls" style="display:none;">
         <div class="ctrl-row">
-          <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
-          <span class="ctrl-val" id="tiltVal">32°</span>
+          <span class="ctrl-label" style="text-transform:none;font-size:10px;">Ring Speed</span>
+          <span class="ctrl-val" id="diffSpinVal">1.0x</span>
         </div>
-        <input type="range" id="tiltSlider" min="-1.4" max="1.4" step="0.01" value="0.55"
-               oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
+        <input type="range" id="diffSpinSlider" min="-4" max="4" step="0.1" value="1"
+               oninput="setDiffSpin(this.value)" style="opacity:0.8;margin-bottom:4px;">
+        <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-bottom:8px;">
+          PLAYS WITH AUDIO · OUTER RINGS FASTER
+        </div>
       </div>
 
       <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="spinLabel">3D Spin</span>
-        <span class="ctrl-val" id="spin3dVal">0.0x</span>
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">BPM Stars</span>
+        <button class="btn" id="bpmStarsBtn" onclick="toggleBpmStars()" style="padding:2px 6px;font-size:8px;color:#fff7d6;border-color:#fff7d6;">ON</button>
       </div>
-      <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0"
-             oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Star Speed</span>
+        <span class="ctrl-val" id="starSpeedVal" style="color:#fff7d6;">1.5x</span>
+      </div>
+      <input type="range" id="starSpeedSlider" min="0.3" max="5" step="0.1" value="1.5"
+             oninput="setStarSpeed(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#fff7d6;">
 
       <div class="ctrl-row">
-        <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="bulgeLabel">Bulge</span>
-        <span class="ctrl-val" id="bulge3dVal">140</span>
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Center Rings</span>
+        <button class="btn" id="ringsBtn" onclick="toggleCenterRings()" style="padding:2px 6px;font-size:8px;color:#ffffff;border-color:#ffffff;">ON</button>
       </div>
-      <input type="range" id="bulge3dSlider" min="0" max="400" step="5" value="140"
-             oninput="setBulge3D(this.value)" style="opacity:0.8;margin-bottom:4px;">
+    </div>
+  </div>
 
-      <div id="orbitHint" style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;">
-        DRAG TO ORBIT · SCROLL TO ZOOM
+  <!-- ===== Motion ===== -->
+  <div class="folder collapsed">
+    <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">Motion</span><span class="chev">▾</span>
+    </div>
+    <div class="folder-body">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Spin Map</span>
+        <button class="btn" id="spinBtn" onclick="toggleSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
-      <div id="povHint" style="display:none;font-size:8px;color:#00ffcc;font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;line-height:1.7;">
-        STANDING ON THE STAR<br>W/A/S/D OR DRAG TO LOOK<br>SPIN = ORBIT · BULGE = ELEVATION
+      <input type="range" id="spinSpeed" min="-5" max="5" step="0.1" value="1"
+             oninput="spinSpeed = parseFloat(this.value)" style="opacity:0.5;margin-bottom:8px;">
+
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Float & Bounce</span>
+        <button class="btn" id="floatBtn" onclick="toggleFloat()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 3D Galaxy ===== -->
+  <div class="folder collapsed">
+    <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">3D Galaxy</span><span class="chev">▾</span>
+    </div>
+    <div class="folder-body">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">3D Galaxy</span>
+        <button class="btn" id="threeDBtn" onclick="toggle3D()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      </div>
+
+      <div id="threeDControls" style="display:none;">
+        <div class="ctrl-row">
+          <span class="ctrl-label" style="text-transform:none;font-size:10px;">POV · Stargaze</span>
+          <button class="btn" id="povBtn" onclick="togglePOV()" style="padding:2px 6px;font-size:8px;">OFF</button>
+        </div>
+
+        <div id="tiltControls">
+          <div class="ctrl-row">
+            <span class="ctrl-label" style="text-transform:none;font-size:10px;">Tilt</span>
+            <span class="ctrl-val" id="tiltVal">32°</span>
+          </div>
+          <input type="range" id="tiltSlider" min="-1.4" max="1.4" step="0.01" value="0.55"
+                 oninput="setTilt(this.value)" style="opacity:0.8;margin-bottom:8px;">
+        </div>
+
+        <div class="ctrl-row">
+          <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="spinLabel">3D Spin</span>
+          <span class="ctrl-val" id="spin3dVal">0.0x</span>
+        </div>
+        <input type="range" id="spin3dSlider" min="-3" max="3" step="0.1" value="0"
+               oninput="setSpin3D(this.value)" style="opacity:0.8;margin-bottom:8px;">
+
+        <div class="ctrl-row">
+          <span class="ctrl-label" style="text-transform:none;font-size:10px;" id="bulgeLabel">Bulge</span>
+          <span class="ctrl-val" id="bulge3dVal">140</span>
+        </div>
+        <input type="range" id="bulge3dSlider" min="0" max="400" step="5" value="140"
+               oninput="setBulge3D(this.value)" style="opacity:0.8;margin-bottom:4px;">
+
+        <div id="orbitHint" style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;">
+          DRAG TO ORBIT · SCROLL TO ZOOM
+        </div>
+        <div id="povHint" style="display:none;font-size:8px;color:#00ffcc;font-family:monospace;letter-spacing:1px;text-align:center;margin-top:4px;line-height:1.7;">
+          STANDING ON THE STAR<br>W/A/S/D OR DRAG TO LOOK<br>SPIN = ORBIT · BULGE = ELEVATION
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Display ===== -->
+  <div class="folder collapsed">
+    <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">Display</span><span class="chev">▾</span>
+    </div>
+    <div class="folder-body">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">8-Bit Mode</span>
+        <button class="btn" id="eightBitBtn" onclick="toggle8Bit()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
     </div>
   </div>
@@ -396,6 +455,7 @@ let ringCooldown  = 0;
 
 let ripples       = [];   // gold audio ripples from the root (audio glow mode)
 let glitchAmt     = 0;    // 0..1, drives the tv-static / glitch distortion on auras
+let noiseAmount   = 1;    // user multiplier for the noise/glitch intensity
 
 let audioCtx = null;
 let analyser = null;
@@ -684,6 +744,8 @@ function toggleBpmStars() {
   else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; shootingStars = []; }
 }
 function setStarSpeed(v) { starSpeedMul = parseFloat(v); document.getElementById('starSpeedVal').textContent = starSpeedMul.toFixed(1) + 'x'; }
+function setNoiseAmount(v) { noiseAmount = parseFloat(v); document.getElementById('noiseVal').textContent = noiseAmount.toFixed(2) + 'x'; }
+function toggleFolder(head) { head.parentElement.classList.toggle('collapsed'); }
 function setShakeSens(v) { shakeSens = parseFloat(v); document.getElementById('shakeSensVal').textContent = shakeSens.toFixed(2) + 'x'; }
 function toggleCenterRings() {
   centerRingsOn = !centerRingsOn;
@@ -1353,7 +1415,7 @@ d3.timer(elapsed => {
 
     // Audio glow mode: gold ripples off the root + tv-static glitch on the auras.
     if (glowMode === 'audio' && !is8Bit) {
-      glitchAmt = Math.min(1, smoothedEnergy * manualGlowVal);
+      glitchAmt = Math.min(1.5, smoothedEnergy * manualGlowVal * noiseAmount);
       if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) spawnRipple(smoothedEnergy);
     } else { glitchAmt *= 0.8; }
 
