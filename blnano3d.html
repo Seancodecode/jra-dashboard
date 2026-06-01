@@ -6,6 +6,7 @@
 <style>
   body{margin:0;background:#050508;overflow:hidden;font-family:system-ui,sans-serif;}
   #cv{width:100%;height:100vh;}
+  canvas { display: block; }
 
   .ctrls{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:5px;z-index:20;width:175px;}
   .btn{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:monospace;
@@ -30,7 +31,8 @@
   #tip{position:absolute;background:rgba(15,15,22,0.95);border:1px solid rgba(255,255,255,0.15);
     border-radius:8px;padding:12px 16px;font-size:13px;color:#f0f0f0;
     box-shadow:0 10px 40px rgba(0,0,0,0.8);opacity:0;transition:opacity .2s;z-index:30;max-width:220px;
-    pointer-events:auto;left:-9999px;backdrop-filter:blur(10px);}
+    pointer-events:none;left:-9999px;backdrop-filter:blur(10px);}
+  #tip a{pointer-events:auto;}
   #tip a:hover{color:#fff !important;text-shadow:0 0 10px rgba(79,195,247,0.8);}
 
   .hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
@@ -118,10 +120,7 @@
     letter-spacing:1px;text-transform:uppercase;flex-shrink:0;line-height:1.6;
   }
 
-  body.eightbit svg, body.eightbit svg * { shape-rendering:crispEdges; }
-  body.eightbit .aura, body.eightbit .horse-photo, body.eightbit .photo-ring { display:none !important; }
-  body.eightbit svg text { font-family:'Courier New',monospace !important; text-shadow:none !important; letter-spacing:0; }
-  body.eightbit image { image-rendering:pixelated; }
+  body.eightbit canvas { image-rendering:pixelated; }
   #crt{position:fixed;inset:0;pointer-events:none;z-index:5;display:none;}
   body.eightbit #crt{display:block;
     background:
@@ -322,11 +321,21 @@
 <div class="hint">Click to expand/collapse · Drag node to reposition · Scroll to zoom</div>
 
 <script>
+const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2VmbGF5a3R4eWppZHZrZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODQyMjMsImV4cCI6MjA5NTY2MDIyM30.Yq0sdcWYzB0rQyMdXlOAwFAi1wFrHkJcdYs-0Z6uJvU';
+const db = window.supabase.createClient(supabaseUrl, supabaseKey);
+
 const W = window.innerWidth, H = window.innerHeight;
 const cx = W/2, cy = H/2;
 let root = null;
 let spreadFactor = 1;
 let maxDepth = 0;
+
+const imageCache = {};
+let simulationTree = null;
+let hoveredNode = null;
+let draggedNode = null;
+let depthFreqs = [];
 
 let globalTime    = 0;
 let glowMode      = 'manual';
@@ -340,7 +349,6 @@ let floatSim      = null;
 let isSpinOn      = false;
 let spinSpeed     = 1;
 let mapAngle      = 0;
-let ripples       = [];
 
 let is3DOn        = false;
 let yaw3d         = 0;
@@ -356,7 +364,6 @@ let lookYaw       = 0;
 let lookPitch     = -0.30;
 let povSpin       = 0;
 const keys        = {};
-let povGround     = null;
 
 let isShakeOn     = true;
 let shakeEnergy   = 0;
@@ -371,27 +378,18 @@ let audioLevel    = 0;
 
 let is8Bit        = false;
 let _frame        = 0;
-let cachedInner   = null;
-let cachedNd      = null;
-let rippleGroup   = null;
-let linkSel       = null;
-let innerAnimated = false;
-
 let specSmooth    = null;
 
 let bpmStarsOn    = true;
 let beatAvg       = 0;
 let bassPrev      = 0;
-let lastBeatT     = -1e9;
 let shootingStars = [];
-let starFx        = null;
 let starSpeedMul  = 1.5;
 
 let centerRingsOn = true;
 let centerRings   = [];
 let ringEnvPrev   = 0;
 let ringCooldown  = 0;
-let ringFx        = null;
 
 let audioCtx = null;
 let analyser = null;
@@ -401,91 +399,168 @@ let sourceNode = null;
 let currentStream = null;
 let isAudioPlaying = false;
 
-const dropZone = document.getElementById('dropZone');
-document.addEventListener('dragover', e => {
-  e.preventDefault();
-  dropZone.style.display = 'flex';
-});
-document.addEventListener('dragleave', e => {
-  e.preventDefault();
-  if(e.relatedTarget === null) dropZone.style.display = 'none';
-});
-document.addEventListener('drop', async e => {
-  e.preventDefault();
-  dropZone.style.display = 'none';
-  const file = e.dataTransfer.files[0];
-  if (file && (file.type.includes('audio') || file.name.match(/\.(mp3|wav)$/i))) {
-    handleFileAudio(file);
+const canvas = d3.select('#cv').append('canvas').attr('width', W).attr('height', H);
+const ctx = canvas.node().getContext('2d');
+let zoomT = d3.zoomIdentity;
+
+const zoom = d3.zoom().scaleExtent([0.05, 8])
+  .filter(ev => is3DOn ? ev.type === 'wheel' : (!ev.ctrlKey && !ev.button))
+  .on('zoom', e => { zoomT = e.transform; });
+canvas.call(zoom);
+
+canvas.on('mousemove', (e) => {
+  if (!simulationTree) return;
+  const mouseX = (e.clientX - zoomT.x) / zoomT.k;
+  const mouseY = (e.clientY - zoomT.y) / zoomT.k;
+  
+  const closest = simulationTree.find(mouseX, mouseY, 30);
+  
+  if (closest !== hoveredNode) {
+    hoveredNode = closest;
+    if (hoveredNode) {
+      showTip(e, hoveredNode);
+      canvas.style('cursor', 'pointer');
+    } else {
+      hideTip();
+      canvas.style('cursor', 'default');
+    }
+  } else if (hoveredNode) {
+    tipEl.style.left = (e.clientX + 15) + 'px';
+    tipEl.style.top = (e.clientY + 15) + 'px';
+  }
+  
+  if (orbit3d && is3DOn) {
+    const dx = (e.clientX - lastPX) * 0.006;
+    const dy = (e.clientY - lastPY) * 0.006;
+    lastPX = e.clientX; lastPY = e.clientY;
+    if (povMode) {
+      lookYaw += dx; lookPitch += dy;
+      lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch));
+    } else {
+      yaw3d += dx; pitch3d += dy;
+      pitch3d = Math.max(-1.4, Math.min(1.4, pitch3d));
+      const ts = document.getElementById('tiltSlider');
+      if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
+    }
   }
 });
 
+canvas.on('mousedown', e => {
+  if (is3DOn) { orbit3d = true; lastPX = e.clientX; lastPY = e.clientY; }
+});
+window.addEventListener('mouseup', () => { orbit3d = false; });
+
+const drag = d3.drag()
+  .subject((e) => {
+    const x = (e.x - zoomT.x) / zoomT.k;
+    const y = (e.y - zoomT.y) / zoomT.k;
+    return simulationTree ? simulationTree.find(x, y, 30) : null;
+  })
+  .on('start', (e) => {
+    draggedNode = e.subject;
+    if (isFloatOn && floatSim) floatSim.alphaTarget(0.3).restart();
+  })
+  .on('drag', (e) => {
+    if (draggedNode) {
+      draggedNode.cartX = e.x; draggedNode.cartY = e.y;
+      draggedNode.data.ox = e.x; draggedNode.data.oy = e.y;
+      if (isFloatOn) { draggedNode.fx = e.x; draggedNode.fy = e.y; }
+    }
+  })
+  .on('end', () => {
+    if (isFloatOn && draggedNode) {
+      draggedNode.fx = null; draggedNode.fy = null;
+      if (floatSim) floatSim.alphaTarget(0);
+    }
+    if (draggedNode && !isFloatOn && !is3DOn) {
+      if (draggedNode._children) {
+        draggedNode.children = draggedNode.children ? null : draggedNode._children;
+        draggedNode.data.ox = null; draggedNode.data.oy = null;
+        update(draggedNode);
+      }
+    }
+    draggedNode = null;
+  });
+
+canvas.call(drag);
+
+window.addEventListener('keydown', e => {
+  if (!is3DOn || !povMode) return;
+  const k = e.key.toLowerCase();
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+    keys[k] = true; e.preventDefault();
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+function getHorseImage(id) {
+  if (imageCache[id]) return imageCache[id];
+  const img = new Image();
+  img.crossOrigin = "Anonymous";
+  const jpgUrl = `${supabaseUrl}/storage/v1/object/public/horse_pics/${id}.jpg`;
+  const pngUrl = `${supabaseUrl}/storage/v1/object/public/horse_pics/${id}.png`;
+  img.src = jpgUrl;
+  img.onload = () => { imageCache[id].loaded = true; };
+  img.onerror = () => {
+    if (img.src === jpgUrl) img.src = pngUrl;
+    else imageCache[id].failed = true;
+  };
+  imageCache[id] = { img: img, loaded: false, failed: false };
+  return imageCache[id];
+}
+
+const dropZone = document.getElementById('dropZone');
+document.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.display = 'flex'; });
+document.addEventListener('dragleave', e => { e.preventDefault(); if(e.relatedTarget === null) dropZone.style.display = 'none'; });
+document.addEventListener('drop', async e => {
+  e.preventDefault(); dropZone.style.display = 'none';
+  const file = e.dataTransfer.files[0];
+  if (file && (file.type.includes('audio') || file.name.match(/\.(mp3|wav)$/i))) handleFileAudio(file);
+});
+
 async function handleFileAudio(file) {
-  if (sourceNode) { sourceNode.disconnect(); }
+  if (sourceNode) sourceNode.disconnect();
   if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  
   document.getElementById('welcome').style.display = 'block';
   document.getElementById('welcome').innerHTML = 'Decoding Audio...';
-
   const arrayBuffer = await file.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-  
   sourceNode = audioCtx.createBufferSource();
   sourceNode.buffer = audioBuffer;
-  
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 256;
   analyser.smoothingTimeConstant = 0.6;
   dataArray = new Uint8Array(analyser.frequencyBinCount);
-  
   gainNode = audioCtx.createGain();
-  const volSlider = document.getElementById('volSlider');
-  gainNode.gain.value = parseFloat(volSlider.value);
-  
+  gainNode.gain.value = parseFloat(document.getElementById('volSlider').value);
   sourceNode.connect(analyser);
   analyser.connect(gainNode);
   gainNode.connect(audioCtx.destination);
   sourceNode.start(0);
-  
   audioStarted();
 }
 
 async function captureTabAudio() {
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: "browser" },
-      audio: true
-    });
-
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" }, audio: true });
     if (stream.getAudioTracks().length === 0) {
       alert('Hold up, you forgot to check the "Share tab audio" toggle at the bottom of the popup.');
-      stream.getTracks().forEach(t => t.stop());
-      return;
+      stream.getTracks().forEach(t => t.stop()); return;
     }
-
-    if (sourceNode) { sourceNode.disconnect(); }
-    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
+    if (sourceNode) sourceNode.disconnect();
+    if (currentStream) currentStream.getTracks().forEach(t => t.stop());
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
     currentStream = stream;
     sourceNode = audioCtx.createMediaStreamSource(stream);
-    
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.6;
     dataArray = new Uint8Array(analyser.frequencyBinCount);
-    
     sourceNode.connect(analyser);
-    
     audioStarted();
-    
-    stream.getVideoTracks()[0].onended = () => {
-      stopAudio();
-    };
-
-  } catch (err) {
-    console.error(err);
-  }
+    stream.getVideoTracks()[0].onended = () => stopAudio();
+  } catch (err) { console.error(err); }
 }
 
 function audioStarted() {
@@ -493,7 +568,6 @@ function audioStarted() {
   document.getElementById('welcome').style.display = 'none';
   document.getElementById('stopAudioBtn').style.display = 'block';
   document.getElementById('tabAudioBtn').style.display = 'none';
-  
   if (!currentStream) {
       document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'flex');
       document.getElementById('volSlider').style.display = 'block';
@@ -501,37 +575,17 @@ function audioStarted() {
 }
 
 function stopAudio() {
-  if (sourceNode) {
-    if (sourceNode.stop) sourceNode.stop();
-    sourceNode.disconnect();
-  }
-  if (currentStream) {
-    currentStream.getTracks().forEach(t => t.stop());
-    currentStream = null;
-  }
-  
+  if (sourceNode) { if (sourceNode.stop) sourceNode.stop(); sourceNode.disconnect(); }
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   isAudioPlaying = false;
   document.getElementById('stopAudioBtn').style.display = 'none';
   document.getElementById('tabAudioBtn').style.display = 'block';
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
-  NG.selectAll('g.node-inner').attr('transform', 'scale(1)');
-  
-  ripples = [];
-  NG.selectAll('.ripple').remove();
-
-  applyStaticGlow(glowMode === 'audio' ? 0 : manualGlowVal);
-  d3.select('#glitchDisplacement').attr('scale', 0);
-  
-  if (isReactLinksOn) {
-      (linkSel || LG.selectAll('path')).attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5).attr('stroke-opacity', 0.15);
-  }
 }
 
 function updateVolume(val) {
   document.getElementById('volVal').textContent = Math.round(val * 100) + '%';
-  if (gainNode) {
-    gainNode.gain.value = parseFloat(val);
-  }
+  if (gainNode) gainNode.gain.value = parseFloat(val);
 }
 
 function toggleGlowMode() {
@@ -539,855 +593,168 @@ function toggleGlowMode() {
   const slider = document.getElementById('glowSlider');
   const label = document.getElementById('glowLabel');
   const valDisp = document.getElementById('glowVal');
-
   if (glowMode === 'manual') {
-    glowMode = 'audio';
-    btn.textContent = 'AUDIO';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    slider.style.opacity = '0.3';
-    slider.style.pointerEvents = 'none';
-    label.textContent = 'Max Threshold';
-    valDisp.textContent = manualGlowVal.toFixed(1) + 'x Cap';
-    
-    NG.selectAll('.aura').attr('filter', 'url(#tvStatic)');
+    glowMode = 'audio'; btn.textContent = 'AUDIO'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc';
+    slider.style.opacity = '0.3'; slider.style.pointerEvents = 'none';
+    label.textContent = 'Max Threshold'; valDisp.textContent = manualGlowVal.toFixed(1) + 'x Cap';
   } else {
-    glowMode = 'manual';
-    btn.textContent = 'MANUAL';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    slider.style.opacity = '0.8';
-    slider.style.pointerEvents = 'auto';
-    label.textContent = 'Intensity';
-    valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
-    
-    NG.selectAll('.aura').attr('filter', null);
-    d3.select('#glitchDisplacement').attr('scale', 0);
-    applyStaticGlow(manualGlowVal);
-    
-    ripples = [];
-    NG.selectAll('.ripple').remove();
-    
-    if (!isReactLinksOn) {
-        (linkSel || LG.selectAll('path')).attr('stroke-opacity', 0.15 + manualGlowVal * 0.15);
-    }
+    glowMode = 'manual'; btn.textContent = 'MANUAL'; btn.style.color = ''; btn.style.borderColor = '';
+    slider.style.opacity = '0.8'; slider.style.pointerEvents = 'auto';
+    label.textContent = 'Intensity'; valDisp.textContent = manualGlowVal.toFixed(1) + 'x';
   }
 }
 
 function updateGlowSlider(val) {
   manualGlowVal = parseFloat(val);
-  if (glowMode === 'manual') {
-    document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x';
-    applyStaticGlow(manualGlowVal);
-  } else {
-    document.getElementById('glowVal').textContent = manualGlowVal.toFixed(1) + 'x Cap';
-  }
-}
-
-function applyStaticGlow(factor) {
-  if (glowMode === 'audio') return; 
-
-  NG.selectAll('.aura')
-    .attr('opacity', factor * 0.25)
-    .attr('transform', `scale(${1 + (factor * 0.3)})`);
-
-  NG.selectAll('.main-node')
-    .attr('fill-opacity', d => {
-       let base = d.id === 'root' ? 0.9 : (d.data.g1 > 0 ? 0.8 : 0.15);
-       return Math.min(1, base + (factor * 0.05));
-    });
-
-  if (!isReactLinksOn) {
-      LG.selectAll('path').attr('stroke-opacity', 0.15 + (factor * 0.15));
-  }
+  document.getElementById('glowVal').textContent = glowMode === 'manual' ? manualGlowVal.toFixed(1) + 'x' : manualGlowVal.toFixed(1) + 'x Cap';
 }
 
 function toggleReactLinks() {
   isReactLinksOn = !isReactLinksOn;
   const btn = document.getElementById('reactBtn');
-  if (isReactLinksOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    (linkSel || LG.selectAll('path'))
-      .attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5)
-      .attr('stroke-opacity', glowMode === 'audio' ? 0.1 + smoothedEnergy * 0.8 : (glowMode === 'manual' ? 0.15 + manualGlowVal * 0.15 : 0.15));
-  }
-}
-
-function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
-  let rot = Math.PI / 2 * 3;
-  let step = Math.PI / spikes;
-  let path = '';
-  for(let i = 0; i < spikes; i++) {
-    let x = cx + Math.cos(rot) * outerRadius;
-    let y = cy + Math.sin(rot) * outerRadius;
-    path += (i === 0 ? 'M' : 'L') + x + ',' + y;
-    rot += step;
-    x = cx + Math.cos(rot) * innerRadius;
-    y = cy + Math.sin(rot) * innerRadius;
-    path += 'L' + x + ',' + y;
-    rot += step;
-  }
-  path += 'Z';
-  return path;
-}
-
-d3.timer(elapsed => {
-  globalTime = elapsed;
-  _frame++;
-  if (is8Bit && (_frame % 3 !== 0)) return;
-
-  if (isSpinOn) {
-    mapAngle += spinSpeed * 0.2;
-    mapLayer.attr('transform', `rotate(${mapAngle}, ${cx}, ${cy})`);
-  }
-
-  let hasAudioData = false;
-  if (isAudioPlaying && analyser) {
-    analyser.getByteFrequencyData(dataArray);
-    hasAudioData = true;
-
-    let lsum = 0, llim = Math.floor(dataArray.length * 0.5);
-    for (let i = 0; i < llim; i++) lsum += dataArray[i];
-    const rawLevel = (lsum / llim) / 255;
-    audioLevel += (rawLevel - audioLevel) * 0.3;
-    smoothedEnergy += (Math.min(1, rawLevel) - smoothedEnergy) * 0.3;
-
-    if (isDiffSpinOn) ringPhase += diffSpinSpeed * 0.004 * (0.25 + audioLevel * 1.6);
-
-    if (isSpectrumOn) {
-      if (!specSmooth || specSmooth.length !== dataArray.length) specSmooth = new Float32Array(dataArray.length);
-      for (let i = 0; i < dataArray.length; i++) {
-        const v = dataArray[i] / 255;
-        specSmooth[i] += (v - specSmooth[i]) * (v > specSmooth[i] ? 0.55 : 0.12);
-      }
-    }
-
-    if (bpmStarsOn) {
-      // Drive the stars from the SAME energy signal that animates the
-      // nodes and reactive strings (smoothedEnergy) so they pulse in sync.
-      const react = smoothedEnergy;
-
-      if (react > 0.22) {
-        let activeCount = shootingStars.filter(s => s.held).length;
-        if (activeCount < 4) {
-          spawnShootingStars(react, true);
-        }
-
-        shootingStars.forEach(s => {
-          if (s.held) {
-            s.len = Math.min(800, s.len + 12 * starSpeedMul);
-            s.r += s.speed * 0.3 * starSpeedMul;
-            s.op = 1.5;
-          }
-        });
-      } else {
-        shootingStars.forEach(s => {
-          if (s.held) {
-            s.held = false;
-            s.speed += 5;
-          }
-        });
-      }
-    }
-
-    // Center rings: fire whenever the center reacts to the music.
-    // Uses the same smoothedEnergy that drives the central node, with
-    // rising-edge (beat) detection so a ring launches on each surge.
-    if (centerRingsOn) {
-      if (ringCooldown > 0) ringCooldown--;
-      const e = smoothedEnergy;
-      if (e > 0.14 && e > ringEnvPrev * 1.15 && ringCooldown <= 0) {
-        spawnCenterRing(e);
-        ringCooldown = 6;
-      }
-      ringEnvPrev = e;
-    }
-
-    if (isShakeOn) {
-      const transient = Math.max(0, rawLevel - shakeEnergy);
-      shakeEnergy += (rawLevel - shakeEnergy) * 0.35;
-      const amp = ((shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6) * shakeSens;
-      
-      const speed = 0.04;
-      shakeX = Math.sin(globalTime * speed) * amp + Math.sin(globalTime * speed * 2.3) * (amp * 0.5);
-      shakeY = Math.cos(globalTime * speed * 1.1) * amp + Math.sin(globalTime * speed * 1.7) * (amp * 0.5);
-      shakeR = Math.sin(globalTime * speed * 0.8) * amp * 0.08;
-    } else {
-      shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8;
-    }
-
-    if (glowMode === 'audio' && !is8Bit) {
-      d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
-      d3.select('#glitchDisplacement').attr('scale', smoothedEnergy * 100 * manualGlowVal);
-      if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) {
-        ripples.push({ id: Math.random().toString(), r: 34,
-          op: Math.min(1, smoothedEnergy * 1.5), thickness: 2 + smoothedEnergy * 5 });
-      }
-    }
-    
-    if (isReactLinksOn) {
-       (linkSel || LG.selectAll('path'))
-         .attr('stroke-width', d => (d.source.id === 'root' ? 4 : 2.5) + smoothedEnergy * 12)
-         .attr('stroke-opacity', 0.2 + smoothedEnergy * 0.8);
-    } else if (glowMode === 'audio' && !is8Bit) {
-       (linkSel || LG.selectAll('path')).attr('stroke-opacity', 0.1 + smoothedEnergy * 0.8);
-    }
-    
-  } else {
-    if (glowMode === 'audio') { smoothedEnergy = 0; d3.select('#glitchDisplacement').attr('scale', 0); }
-    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; audioLevel *= 0.9; smoothedEnergy *= 0.9;
-    
-    if (isReactLinksOn) {
-        (linkSel || LG.selectAll('path')).attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5).attr('stroke-opacity', 0.15);
-    }
-  }
-
-  for (let i = ripples.length - 1; i >= 0; i--) {
-      ripples[i].r += 1 + smoothedEnergy * 3;
-      ripples[i].op -= 0.01;
-      if (ripples[i].op <= 0) ripples.splice(i, 1);
-  }
-  if (rippleGroup && !rippleGroup.empty()) {
-      const rpl = rippleGroup.selectAll('circle.ripple').data(ripples, d => d.id);
-      rpl.enter().append('circle')
-         .attr('class', 'ripple').attr('fill', 'none').attr('stroke', '#ffd700')
-         .merge(rpl)
-         .attr('r', d => d.r)
-         .attr('stroke-width', d => d.thickness * d.op)
-         .attr('stroke-opacity', d => d.op)
-         .attr('filter', (glowMode === 'audio' && !is8Bit) ? 'url(#tvStatic)' : null);
-      rpl.exit().remove();
-  }
-
-  updateShootingStars();
-  updateCenterRings();
-
-  const animateInner = hasAudioData;
-  const innerSel = cachedInner || NG.selectAll('g.node-inner');
-  if (animateInner) {
-    innerSel.each(function(d) {
-      let audioScale = 0;
-      if (hasAudioData) {
-        const safeDepth = Math.max(1, maxDepth);
-        let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
-        if (binIndex > dataArray.length - 1) binIndex = dataArray.length - 1;
-        const normFreq = (dataArray[binIndex] || 0) / 255;
-
-        if (glowMode === 'audio' && !is8Bit) {
-          const capped = (normFreq * normFreq) * manualGlowVal;
-          let a = d._auraEl; if (a === undefined) a = d._auraEl = this.querySelector('.aura');
-          if (a) { a.setAttribute('opacity', Math.min(1, capped * 1.5)); a.setAttribute('transform', `scale(${1 + capped * 1.5})`); }
-          let m = d._mainEl; if (m === undefined) m = d._mainEl = this.querySelector('.main-node');
-          if (m) { const base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.15); m.setAttribute('fill-opacity', Math.min(1, base + capped * 0.4)); }
-        }
-        audioScale = normFreq * 0.8;
-      }
-      const scale = 1 + audioScale * 0.3;
-      this.setAttribute('transform', `scale(${scale})`);
-    });
-    innerAnimated = true;
-  } else if (innerAnimated) {
-    innerSel.attr('transform', 'scale(1)');
-    innerAnimated = false;
-  }
-
-  if (is3DOn) {
-    if (povMode) {
-      const ls = 0.035;
-      if (keys['a'] || keys['arrowleft'])  lookYaw   -= ls;
-      if (keys['d'] || keys['arrowright']) lookYaw   += ls;
-      if (keys['w'] || keys['arrowup'])    lookPitch -= ls;
-      if (keys['s'] || keys['arrowdown'])  lookPitch += ls;
-      lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch));
-      povSpin += spin3dSpeed * 0.01;
-    } else if (!orbit3d) {
-      yaw3d += spin3dSpeed * 0.01;
-    }
-    project3D();
-  } else {
-    let needLinks = false;
-    if (isDiffSpinOn && !isFloatOn && root) {
-      root.descendants().forEach(d => {
-        if (d.data.ox != null) return;
-        const a = ringAz(d);
-        d.cartX = cx + d.y * Math.cos(a - Math.PI / 2);
-        d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
-      });
-      (cachedNd || NG.selectAll('g.nd')).attr('transform', d => `translate(${d.cartX},${d.cartY})`);
-      needLinks = true;
-    }
-    if (isSpectrumOn) needLinks = true;
-    if (needLinks) redrawLinksFast();
-  }
-
-  applyCameraTransform();
-});
-
-function ringAz(d){
-  return d.x + (isDiffSpinOn ? ringPhase * d.depth : 0);
-}
-
-function spawnShootingStars(strength, held = false){
-  if (shootingStars.length > 60) return; 
-  
-  const n = held ? 1 : 0; 
-  for (let k = 0; k < n; k++) {
-    const ang = Math.random() * Math.PI * 2;
-    shootingStars.push({
-      id: Math.random().toString(36).slice(2),
-      ang,
-      r: 30, 
-      speed: 12 + strength * 20, 
-      len: 20, 
-      op: 1.5,
-      held: held 
-    });
-  }
-}
-
-function updateShootingStars(){
-  if (!starFx) return;
-  let ax = cx, ay = cy;
-  if (root && root.children !== undefined) {
-    if (isFinite(root.cartX)) ax = root.cartX;
-    if (isFinite(root.cartY)) ay = root.cartY;
-  }
-  const maxReach = Math.hypot(W, H) * 0.75;
-
-  for (let i = shootingStars.length - 1; i >= 0; i--) {
-    const s = shootingStars[i];
-    
-    if (!s.held) {
-      s.r += s.speed * starSpeedMul;
-      s.op -= 0.015;
-    }
-    
-    if (s.op <= 0 || (s.r - s.len) > maxReach) shootingStars.splice(i, 1);
-  }
-
-  const sel = starFx.selectAll('line.shoot').data(shootingStars, d => d.id);
-  sel.enter().append('line')
-      .attr('class', 'shoot')
-      .attr('stroke', '#ffffff')
-      .attr('stroke-linecap', 'round')
-    .merge(sel)
-      .attr('x1', d => ax + Math.cos(d.ang) * Math.max(0, d.r - d.len))
-      .attr('y1', d => ay + Math.sin(d.ang) * Math.max(0, d.r - d.len))
-      .attr('x2', d => ax + Math.cos(d.ang) * d.r)
-      .attr('y2', d => ay + Math.sin(d.ang) * d.r)
-      .attr('stroke-width', d => 2 + 4 * d.op)
-      .attr('stroke-opacity', d => Math.min(1, d.op))
-      .style('filter', 'drop-shadow(0px 0px 8px #fff7d6)');
-  sel.exit().remove();
-}
-
-function spawnCenterRing(strength){
-  if (centerRings.length > 30) return;
-  centerRings.push({
-    id: Math.random().toString(36).slice(2),
-    r: 18,
-    op: 1,
-    w: 2 + strength * 5          // louder hit -> thicker ring
-  });
-}
-
-function updateCenterRings(){
-  if (!ringFx) return;
-
-  // Anchor at the centre of the map (the root node), matching the stars.
-  let ax = cx, ay = cy;
-  if (root && root.children !== undefined) {
-    if (isFinite(root.cartX)) ax = root.cartX;
-    if (isFinite(root.cartY)) ay = root.cartY;
-  }
-
-  const nearEdge = Math.min(W, H) * 0.5;        // ring starts leaving the view
-  const farEdge  = Math.hypot(W, H) * 0.55;     // fully out of bounds
-  const ringSpeed = farEdge / 80;               // ~80 frames to cross
-
-  for (let i = centerRings.length - 1; i >= 0; i--) {
-    const ring = centerRings[i];
-    ring.r += ringSpeed;
-    // Full opacity while expanding; fade only once it goes out of bounds.
-    if (ring.r > nearEdge) {
-      ring.op = Math.max(0, 1 - (ring.r - nearEdge) / (farEdge - nearEdge));
-    }
-    if (ring.op <= 0 || ring.r >= farEdge) centerRings.splice(i, 1);
-  }
-
-  const sel = ringFx.selectAll('circle.cring').data(centerRings, d => d.id);
-  sel.enter().append('circle')
-      .attr('class', 'cring')
-      .attr('fill', 'none')
-      .attr('stroke', '#ffffff')
-    .merge(sel)
-      .attr('cx', ax)
-      .attr('cy', ay)
-      .attr('r', d => d.r)
-      .attr('stroke-width', d => d.w * Math.max(0.35, d.op))
-      .attr('stroke-opacity', d => Math.min(1, d.op))
-      .style('filter', 'drop-shadow(0px 0px 6px rgba(255,255,255,0.85))');
-  sel.exit().remove();
-}
-
-function onLevelSlide(val) {
-  const v = parseInt(val);
-  document.getElementById('levelVal').textContent = v + ' / ' + maxDepth;
-  
-  if (!root) return;
-  
-  traverseAll(root, d => {
-    if (d.depth < v && d._children) {
-      d.children = d._children;
-    } else {
-      d.children = null;
-    }
-    d.data.ox = null; 
-    d.data.oy = null;
-  });
-  
-  update(root);
-}
-
-function updateSpacing(val) {
-  spreadFactor = parseFloat(val);
-  document.getElementById('spreadVal').textContent = parseFloat(val).toFixed(1) + 'x';
-  if (root) {
-    traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
-    update(root);
-  }
+  if (isReactLinksOn) { btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; }
 }
 
 function toggleSpin() {
   isSpinOn = !isSpinOn;
   const btn = document.getElementById('spinBtn');
   const slider = document.getElementById('spinSpeed');
-  if (isSpinOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    slider.style.opacity = '1';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    slider.style.opacity = '0.5';
-  }
+  if (isSpinOn) { btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc'; slider.style.opacity = '1'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; slider.style.opacity = '0.5'; }
 }
 
 function toggleSpectrum() {
   isSpectrumOn = !isSpectrumOn;
   const btn = document.getElementById('spectrumBtn');
   const slider = document.getElementById('spectrumSpeed');
-  if (isSpectrumOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    slider.style.opacity = '1';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    slider.style.opacity = '0.5';
-    redrawLinksFast();
-  }
+  if (isSpectrumOn) { btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc'; slider.style.opacity = '1'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; slider.style.opacity = '0.5'; }
 }
 
 function toggleFloat() {
   isFloatOn = !isFloatOn;
   const btn = document.getElementById('floatBtn');
-  
   if (isFloatOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
-    
+    btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc'; btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
+    if (!root) return;
     const nodes = root.descendants();
-    nodes.forEach(d => {
-      if (isNaN(d.x) || d.x === undefined) { d.x = d.cartX; d.y = d.cartY; }
-      d.vx = 0; d.vy = 0;
-    });
-
-    floatSim = d3.forceSimulation(nodes)
-      .alphaDecay(0)
-      .velocityDecay(0.15)
+    nodes.forEach(d => { if (isNaN(d.x) || d.x === undefined) { d.x = d.cartX; d.y = d.cartY; } d.vx = 0; d.vy = 0; });
+    floatSim = d3.forceSimulation(nodes).alphaDecay(0).velocityDecay(0.15)
       .force('collide', d3.forceCollide().radius(d => nodeR(d) + 8).iterations(2))
       .force('x', d3.forceX(d => d.cartX0).strength(0.04))
       .force('y', d3.forceY(d => d.cartY0).strength(0.04))
       .on('tick', () => {
          nodes.forEach(d => {
-           if (!d.data.ox) {
-             d.vx += (Math.random() - 0.5) * 0.5;
-             d.vy += (Math.random() - 0.5) * 0.5;
-             d.cartX = d.x;
-             d.cartY = d.y;
-           } else {
-             d.x = d.data.ox;
-             d.y = d.data.oy;
-             d.cartX = d.data.ox;
-             d.cartY = d.data.oy;
-           }
+           if (!d.data.ox) { d.vx += (Math.random() - 0.5) * 0.5; d.vy += (Math.random() - 0.5) * 0.5; d.cartX = d.x; d.cartY = d.y; }
+           else { d.x = d.data.ox; d.y = d.data.oy; d.cartX = d.data.ox; d.cartY = d.data.oy; }
          });
-         NG.selectAll('g.nd').attr('transform', d => `translate(${d.cartX},${d.cartY})`);
-         redrawLinksFast();
       });
   } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    btn.style.boxShadow = 'none';
-    
-    if (floatSim) {
-       floatSim.stop();
-       floatSim = null;
+    btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; btn.style.boxShadow = 'none';
+    if (floatSim) { floatSim.stop(); floatSim = null; }
+    if (root) {
+      root.descendants().forEach(d => { d.cartX = d.data.ox || d.cartX0; d.cartY = d.data.oy || d.cartY0; });
+      update(root);
     }
-    
-    const nodes = root.descendants();
-    nodes.forEach(d => {
-       d.cartX = d.data.ox || d.cartX0;
-       d.cartY = d.data.oy || d.cartY0;
-    });
-    
-    NG.selectAll('g.nd')
-      .transition().duration(600)
-      .attr('transform', d => `translate(${d.cartX},${d.cartY})`);
-      
-    d3.select(g.node()).transition().duration(600).tween('links', () => {
-      return () => { if (!isFloatOn) redrawLinksFast(); };
-    });
   }
 }
 
-let rankOpen = false;
-
-function setTilt(v){
-  pitch3d = parseFloat(v);
-  document.getElementById('tiltVal').textContent = Math.round(pitch3d * 180 / Math.PI) + '\u00b0';
-}
-function setSpin3D(v){
-  spin3dSpeed = parseFloat(v);
-  document.getElementById('spin3dVal').textContent = parseFloat(v).toFixed(1) + 'x';
-}
-function setBulge3D(v){
-  bulge3d = parseFloat(v);
-  document.getElementById('bulge3dVal').textContent = Math.round(bulge3d);
-}
-
-function toggle8Bit(){
+function setTilt(v) { pitch3d = parseFloat(v); document.getElementById('tiltVal').textContent = Math.round(pitch3d * 180 / Math.PI) + '\u00b0'; }
+function setSpin3D(v) { spin3dSpeed = parseFloat(v); document.getElementById('spin3dVal').textContent = parseFloat(v).toFixed(1) + 'x'; }
+function setBulge3D(v) { bulge3d = parseFloat(v); document.getElementById('bulge3dVal').textContent = Math.round(bulge3d); }
+function toggle8Bit() {
   is8Bit = !is8Bit;
   const btn = document.getElementById('eightBitBtn');
   document.body.classList.toggle('eightbit', is8Bit);
-  if (is8Bit) {
-    btn.textContent = 'ON';
-    btn.style.color = '#7CFC00';
-    btn.style.borderColor = '#7CFC00';
-    btn.style.boxShadow = '0 0 10px rgba(124,252,0,0.3)';
-    NG.selectAll('.aura').attr('filter', null);
-    NG.selectAll('.ripple').attr('filter', null);
-    d3.select('#glitchDisplacement').attr('scale', 0);
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    btn.style.boxShadow = 'none';
-  }
-  if (root) {
-    if (is3DOn) project3D();
-    else { redrawLinksFast(); update(root); }
-  }
+  ctx.imageSmoothingEnabled = !is8Bit;
+  if (is8Bit) { btn.textContent = 'ON'; btn.style.color = '#7CFC00'; btn.style.borderColor = '#7CFC00'; btn.style.boxShadow = '0 0 10px rgba(124,252,0,0.3)'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; btn.style.boxShadow = 'none'; }
 }
-
-function toggleBpmStars(){
+function toggleBpmStars() {
   bpmStarsOn = !bpmStarsOn;
   const btn = document.getElementById('bpmStarsBtn');
-  if (bpmStarsOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#fff7d6';
-    btn.style.borderColor = '#fff7d6';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    shootingStars = [];
-    if (starFx) starFx.selectAll('line.shoot').remove();
-  }
+  if (bpmStarsOn) { btn.textContent = 'ON'; btn.style.color = '#fff7d6'; btn.style.borderColor = '#fff7d6'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; shootingStars = []; }
 }
-
-function setStarSpeed(v){
-  starSpeedMul = parseFloat(v);
-  document.getElementById('starSpeedVal').textContent = starSpeedMul.toFixed(1) + 'x';
-}
-
-function setShakeSens(v){
-  shakeSens = parseFloat(v);
-  document.getElementById('shakeSensVal').textContent = shakeSens.toFixed(2) + 'x';
-}
-
-function toggleCenterRings(){
+function setStarSpeed(v) { starSpeedMul = parseFloat(v); document.getElementById('starSpeedVal').textContent = starSpeedMul.toFixed(1) + 'x'; }
+function setShakeSens(v) { shakeSens = parseFloat(v); document.getElementById('shakeSensVal').textContent = shakeSens.toFixed(2) + 'x'; }
+function toggleCenterRings() {
   centerRingsOn = !centerRingsOn;
   const btn = document.getElementById('ringsBtn');
-  if (centerRingsOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#ffffff';
-    btn.style.borderColor = '#ffffff';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    centerRings = [];
-    if (ringFx) ringFx.selectAll('circle.cring').remove();
-  }
+  if (centerRingsOn) { btn.textContent = 'ON'; btn.style.color = '#ffffff'; btn.style.borderColor = '#ffffff'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; centerRings = []; }
 }
-
-function setDiffSpin(v){
-  diffSpinSpeed = parseFloat(v);
-  document.getElementById('diffSpinVal').textContent = parseFloat(v).toFixed(1) + 'x';
-}
-
-function toggleDiffSpin(){
+function setDiffSpin(v) { diffSpinSpeed = parseFloat(v); document.getElementById('diffSpinVal').textContent = parseFloat(v).toFixed(1) + 'x'; }
+function toggleDiffSpin() {
   isDiffSpinOn = !isDiffSpinOn;
   const btn = document.getElementById('diffSpinBtn');
   document.getElementById('diffSpinControls').style.display = isDiffSpinOn ? 'block' : 'none';
-  if (isDiffSpinOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#ffd700';
-    btn.style.borderColor = '#ffd700';
-    btn.style.boxShadow = '0 0 10px rgba(255,215,0,0.3)';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    btn.style.boxShadow = 'none';
-    ringPhase = 0;
-    if (root && !is3DOn) update(root);
-  }
+  if (isDiffSpinOn) { btn.textContent = 'ON'; btn.style.color = '#ffd700'; btn.style.borderColor = '#ffd700'; btn.style.boxShadow = '0 0 10px rgba(255,215,0,0.3)'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; btn.style.boxShadow = 'none'; ringPhase = 0; if (root && !is3DOn) update(root); }
 }
-
-function toggleShake(){
+function toggleShake() {
   isShakeOn = !isShakeOn;
   const btn = document.getElementById('shakeBtn');
-  if (isShakeOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#cc00ff';
-    btn.style.borderColor = '#cc00ff';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    shakeX = shakeY = shakeR = shakeEnergy = 0;
-    applyCameraTransform();
-  }
+  if (isShakeOn) { btn.textContent = 'ON'; btn.style.color = '#cc00ff'; btn.style.borderColor = '#cc00ff'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; shakeX = shakeY = shakeR = shakeEnergy = 0; }
 }
-
-function togglePOV(){
+function togglePOV() {
   povMode = !povMode;
   const btn = document.getElementById('povBtn');
   document.getElementById('tiltControls').style.display = povMode ? 'none' : 'block';
-  document.getElementById('orbitHint').style.display    = povMode ? 'none' : 'block';
-  document.getElementById('povHint').style.display      = povMode ? 'block' : 'none';
-  document.getElementById('bulgeLabel').textContent     = povMode ? 'Elevation' : 'Bulge';
-  document.getElementById('spinLabel').textContent      = povMode ? 'Orbit Speed' : '3D Spin';
+  document.getElementById('orbitHint').style.display = povMode ? 'none' : 'block';
+  document.getElementById('povHint').style.display = povMode ? 'block' : 'none';
+  document.getElementById('bulgeLabel').textContent = povMode ? 'Elevation' : 'Bulge';
+  document.getElementById('spinLabel').textContent = povMode ? 'Orbit Speed' : '3D Spin';
   setBulge3D(bulge3d);
-
   const spinSlider = document.getElementById('spin3dSlider');
   if (povMode) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
+    btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc'; btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
     lookYaw = 0; lookPitch = -0.30;
     if (parseFloat(spinSlider.value) === 0) { spinSlider.value = 0.5; setSpin3D(0.5); }
   } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    btn.style.boxShadow = 'none';
+    btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; btn.style.boxShadow = 'none';
     spinSlider.value = 0; setSpin3D(0);
-    if (povGround) povGround.style('display', 'none');
   }
-  if (is3DOn) project3D();
 }
-
-function toggle3D(){
+function toggle3D() {
   is3DOn = !is3DOn;
   const btn = document.getElementById('threeDBtn');
   const ctl = document.getElementById('threeDControls');
-
   if (is3DOn) {
-    btn.textContent = 'ON';
-    btn.style.color = '#00ffcc';
-    btn.style.borderColor = '#00ffcc';
-    btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
+    btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc'; btn.style.boxShadow = '0 0 10px rgba(0,255,204,0.3)';
     ctl.style.display = 'block';
-
     if (isFloatOn) toggleFloat();
-    if (isSpinOn)  toggleSpin();
+    if (isSpinOn) toggleSpin();
     mapAngle = 0;
-    d3.select('#mapLayer').attr('transform', null);
-
-    if (root) {
-      traverseAll(root, d => { d.data.ox = null; d.data.oy = null; });
-      update(root);
-      project3D();
-    }
+    if (root) { traverseAll(root, d => { d.data.ox = null; d.data.oy = null; }); update(root); }
   } else {
-    btn.textContent = 'OFF';
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    btn.style.boxShadow = 'none';
+    btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; btn.style.boxShadow = 'none';
     ctl.style.display = 'none';
-    if (povGround) povGround.style('display', 'none');
     if (root) update(root);
   }
 }
 
-function project3D(){
+function onLevelSlide(val) {
+  const v = parseInt(val);
+  document.getElementById('levelVal').textContent = v + ' / ' + maxDepth;
   if (!root) return;
-  const nodes = root.descendants();
-  let maxR = 1;
-  nodes.forEach(d => { if (d.y > maxR) maxR = d.y; });
-  if (povMode) projectPOV(nodes, maxR);
-  else         projectOrbit(nodes, maxR);
-  redrawLinksFast();
-}
-
-function shouldSort3D(){ return (_frame & 3) === 0; }
-
-function projectOrbit(nodes, maxR){
-  const cyaw = Math.cos(yaw3d),  syaw = Math.sin(yaw3d);
-  const cpit = Math.cos(pitch3d), spit = Math.sin(pitch3d);
-  const snap = is8Bit;
-
-  let zmin = Infinity, zmax = -Infinity;
-
-  nodes.forEach(d => {
-    const a  = ringAz(d);
-    const lx = d.y * Math.cos(a - Math.PI / 2);
-    const ly = d.y * Math.sin(a - Math.PI / 2);
-    const lz = (1 - d.y / maxR) * bulge3d;
-
-    const x1 =  lx * cyaw + lz * syaw;
-    const z1 = -lx * syaw + lz * cyaw;
-    const y1 =  ly;
-
-    const y2 = y1 * cpit - z1 * spit;
-    const z2 = y1 * spit + z1 * cpit;
-    const x2 = x1;
-
-    let denom = focal3d - z2;
-    if (denom < 60) denom = 60;
-    const persp = focal3d / denom;
-
-    let px = cx + x2 * persp, py = cy + y2 * persp;
-    if (snap) { px = Math.round(px / 4) * 4; py = Math.round(py / 4) * 4; }
-    d.cartX  = px;
-    d.cartY  = py;
-    d._z3    = z2;
-    d._persp = persp;
-
-    if (z2 < zmin) zmin = z2;
-    if (z2 > zmax) zmax = z2;
+  traverseAll(root, d => {
+    if (d.depth < v && d._children) d.children = d._children;
+    else d.children = null;
+    d.data.ox = null; d.data.oy = null;
   });
-
-  const zrange = (zmax - zmin) || 1;
-
-  const sel = (cachedNd || NG.selectAll('g.nd'))
-    .attr('transform', d => `translate(${d.cartX},${d.cartY}) scale(${d._persp})`)
-    .attr('opacity',   d => 0.35 + 0.65 * ((d._z3 - zmin) / zrange));
-  if (shouldSort3D()) sel.sort((a, b) => a._z3 - b._z3);
+  update(root);
 }
 
-function projectPOV(nodes, maxR){
-  const focal = 820;
-  const near  = 35;
-  const camY  = 26 + bulge3d * 0.45;
-  const snap  = is8Bit;
-
-  const cyaw = Math.cos(lookYaw),   syaw = Math.sin(lookYaw);
-  const cpit = Math.cos(lookPitch), spit = Math.sin(lookPitch);
-
-  nodes.forEach(d => {
-    const t  = maxR > 0 ? d.y / maxR : 0;
-    const az = ringAz(d) + povSpin;
-
-    let dist, elev;
-    if (d.depth === 0) {
-      dist = 130; elev = -0.6;
-    } else {
-      dist = 240 + t * 2000;
-      elev = Math.pow(t, 0.85) * (Math.PI / 2) * 0.96;
-    }
-
-    const wx = dist * Math.cos(elev) * Math.cos(az);
-    const wz = dist * Math.cos(elev) * Math.sin(az);
-    const wy = dist * Math.sin(elev);
-
-    const relx = wx, rely = wy - camY, relz = wz;
-    const x1 =  cyaw * relx - syaw * relz;
-    const z1 =  syaw * relx + cyaw * relz;
-    const y1 =  rely;
-    const y2 =  cpit * y1 + spit * z1;
-    const z2 = -spit * y1 + cpit * z1;
-    const x2 =  x1;
-
-    if (z2 > near) {
-      const persp = focal / z2;
-      let px = cx + x2 * persp, py = cy - y2 * persp;
-      if (snap) { px = Math.round(px / 4) * 4; py = Math.round(py / 4) * 4; }
-      d.cartX  = px;
-      d.cartY  = py;
-      d._z3    = z2;
-      d._persp = Math.min(7, persp);
-      d._vis3  = true;
-    } else {
-      d._vis3  = false;
-      d._z3    = z2;
-      d.cartX  = NaN; d.cartY = NaN; d._persp = 0;
-    }
-  });
-
-  const sel = (cachedNd || NG.selectAll('g.nd'))
-    .attr('transform', d => d._vis3 ? `translate(${d.cartX},${d.cartY}) scale(${d._persp})` : 'scale(0)')
-    .attr('opacity',   d => d._vis3 ? Math.min(1, 0.45 + d._persp * 0.3) : 0);
-  if (shouldSort3D()) sel.sort((a, b) => a._z3 - b._z3);
-
-  drawPovGround();
+function updateSpacing(val) {
+  spreadFactor = parseFloat(val);
+  document.getElementById('spreadVal').textContent = parseFloat(val).toFixed(1) + 'x';
+  if (root) { traverseAll(root, d => { d.data.ox = null; d.data.oy = null; }); update(root); }
 }
 
-function drawPovGround(){
-  if (!povGround) return;
-  const focal = 820;
-  let horizonY = cy - focal * Math.tan(lookPitch);
-  horizonY = Math.max(-H, Math.min(H * 2, horizonY));
-  povGround.style('display', 'block');
-  
-  povGround.select('.pov-floor')
-    .attr('y', horizonY)
-    .attr('height', Math.max(0, H * 2 - horizonY));
-    
-  d3.select('#floorClipRect')
-    .attr('y', horizonY)
-    .attr('height', Math.max(0, H * 2 - horizonY));
-    
-  d3.select('#povReflection')
-    .attr('transform', `translate(0, ${2 * horizonY}) scale(1, -1)`);
-}
-
-function applyCameraTransform(){
-  if (Math.abs(shakeX) + Math.abs(shakeY) + Math.abs(shakeR) > 0.05) {
-    g.attr('transform', `translate(${shakeX},${shakeY}) rotate(${shakeR},${cx},${cy}) ${zoomT}`);
-  } else {
-    g.attr('transform', `${zoomT}`);
-  }
-}
-
+let rankOpen = false;
 function toggleRankPanel() {
   rankOpen = !rankOpen;
   document.getElementById('rankPanel').classList.toggle('open', rankOpen);
@@ -1396,265 +763,35 @@ function toggleRankPanel() {
 
 function focusNode(id) {
   if (!root) return;
-
   let target = null;
-  root.each(d => {
-    if (d.id === String(id)) target = d;
-  });
-
+  root.each(d => { if (d.id === String(id)) target = d; });
   if (!target) return;
-
   let current = target.parent;
   let changed = false;
   while (current) {
-    if (!current.children && current._children) {
-      current.children = current._children;
-      changed = true;
-    }
+    if (!current.children && current._children) { current.children = current._children; changed = true; }
     current = current.parent;
   }
-
-  if (changed) {
-    update(root);
-  }
-
-  const zoomLevel = 2; 
-  const t = d3.zoomIdentity
-    .translate(cx, cy)
-    .scale(zoomLevel)
-    .translate(-target.cartX, -target.cartY);
-
-  svg.transition().duration(800).call(zoom.transform, t);
-
-  pulseNode(id);
+  if (changed) update(root);
+  canvas.transition().duration(800).call(zoom.transform, d3.zoomIdentity.translate(cx, cy).scale(2).translate(-target.cartX, -target.cartY));
 }
 
 function buildRankPanel(nodesMap) {
-  const sorted = Object.values(nodesMap)
-    .filter(n => n.g1 > 0)
-    .sort((a, b) => b.g1 - a.g1);
-
+  const sorted = Object.values(nodesMap).filter(n => n.g1 > 0).sort((a, b) => b.g1 - a.g1);
   const maxG1 = sorted[0]?.g1 || 1;
-  const list  = document.getElementById('rpList');
+  const list = document.getElementById('rpList');
   list.innerHTML = '';
-
   sorted.forEach((n, i) => {
-    const pct      = (n.g1 / maxG1 * 100).toFixed(1);
-    const medals   = ['🥇','🥈','🥉'];
-    const rankHtml = i < 3
-      ? `<div class="rp-rank ${['gold','silver','bronze'][i]}">${medals[i]}</div>`
-      : `<div class="rp-rank">${i + 1}</div>`;
-
+    const pct = (n.g1 / maxG1 * 100).toFixed(1);
+    const medals = ['🥇','🥈','🥉'];
+    const rankHtml = i < 3 ? `<div class="rp-rank ${['gold','silver','bronze'][i]}">${medals[i]}</div>` : `<div class="rp-rank">${i + 1}</div>`;
     const row = document.createElement('div');
-    row.className = 'rp-row';
-    row.dataset.id = n.id;
-    row.innerHTML = `
-      ${rankHtml}
-      <div class="rp-info">
-        <div class="rp-name" title="${n.name}">${n.name}</div>
-        ${n.era ? `<div class="rp-era">${n.era}</div>` : ''}
-      </div>
-      <div class="rp-right">
-        <div class="rp-g1">${n.g1} G1</div>
-        <div class="rp-bar"><div class="rp-bar-fill" style="width:${pct}%"></div></div>
-      </div>`;
-
-    row.addEventListener('click', () => {
-      document.querySelectorAll('.rp-row').forEach(r => r.classList.remove('active'));
-      row.classList.add('active');
-      focusNode(n.id);
-    });
-
+    row.className = 'rp-row'; row.dataset.id = n.id;
+    row.innerHTML = `${rankHtml}<div class="rp-info"><div class="rp-name" title="${n.name}">${n.name}</div>${n.era ? `<div class="rp-era">${n.era}</div>` : ''}</div><div class="rp-right"><div class="rp-g1">${n.g1} G1</div><div class="rp-bar"><div class="rp-bar-fill" style="width:${pct}%"></div></div></div>`;
+    row.addEventListener('click', () => { document.querySelectorAll('.rp-row').forEach(r => r.classList.remove('active')); row.classList.add('active'); focusNode(n.id); });
     list.appendChild(row);
   });
 }
-
-function pulseNode(id) {
-  const sel = NG.selectAll('g.nd').filter(d => d.id === String(id)).select('.main-node');
-  
-  if (id === 'root') {
-    sel.transition().duration(180).attr('transform', 'scale(1.8)')
-       .transition().duration(180).attr('transform', 'scale(1.2)')
-       .transition().duration(180).attr('transform', 'scale(1.5)')
-       .transition().duration(180).attr('transform', 'scale(1.1)')
-       .transition().duration(300).attr('transform', 'scale(1)');
-  } else {
-    sel.transition().duration(180).attr('r', d => nodeR(d) * 2.8)
-       .transition().duration(180).attr('r', d => nodeR(d) * 1.6)
-       .transition().duration(180).attr('r', d => nodeR(d) * 2.4)
-       .transition().duration(180).attr('r', d => nodeR(d) * 1.2)
-       .transition().duration(300).attr('r', d => nodeR(d));
-  }
-}
-
-const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2VmbGF5a3R4eWppZHZrZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODQyMjMsImV4cCI6MjA5NTY2MDIyM30.Yq0sdcWYzB0rQyMdXlOAwFAi1wFrHkJcdYs-0Z6uJvU';
-const db = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-const colorScale = d3.scaleOrdinal([
-  '#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500',
-  '#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222'
-]);
-
-function bcolor(d){
-  if (d.id === 'root') return '#ffd700';
-  let c = d;
-  while (c.parent && c.parent.id !== 'root') c = c.parent;
-  return colorScale(c.id);
-}
-
-function nodeR(d){
-  if (d.id === 'root') return 34;
-  const g1 = d.data.g1 || 0;
-  if (g1 >= 10) return 22; if (g1 >= 7) return 18;
-  if (g1 >= 4)  return 14; if (g1 >= 1) return 11;
-  return 7;
-}
-
-const RADII = [0, 160, 340, 520, 700, 880, 1060];
-
-const svg  = d3.select('#cv').append('svg').attr('width', W).attr('height', H);
-let zoomT  = d3.zoomIdentity;
-const zoom = d3.zoom().scaleExtent([0.05, 8])
-  .filter(ev => is3DOn ? ev.type === 'wheel' : (!ev.ctrlKey && !ev.button))
-  .on('zoom', e => {
-  zoomT = e.transform;
-  applyCameraTransform();
-});
-svg.call(zoom);
-
-const svgNode = svg.node();
-svgNode.addEventListener('pointerdown', e => {
-  if (!is3DOn) return;
-  orbit3d = true; lastPX = e.clientX; lastPY = e.clientY;
-});
-window.addEventListener('pointermove', e => {
-  if (!orbit3d || !is3DOn) return;
-  const dx = (e.clientX - lastPX) * 0.006;
-  const dy = (e.clientY - lastPY) * 0.006;
-  lastPX = e.clientX; lastPY = e.clientY;
-  if (povMode) {
-    lookYaw   += dx;
-    lookPitch += dy;
-    lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
-  } else {
-    yaw3d   += dx;
-    pitch3d += dy;
-    pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
-    const ts = document.getElementById('tiltSlider');
-    if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
-  }
-});
-window.addEventListener('pointerup', () => { orbit3d = false; });
-
-window.addEventListener('keydown', e => {
-  if (!is3DOn || !povMode) return;
-  const k = e.key.toLowerCase();
-  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
-    keys[k] = true;
-    e.preventDefault();
-  }
-});
-window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
-
-const g = svg.append('g');
-const mapLayer = g.append('g').attr('id', 'mapLayer');
-
-const defs = svg.append('defs');
-
-const groundGrad = defs.append('linearGradient')
-  .attr('id', 'groundGrad').attr('x1', '0').attr('y1', '0').attr('x2', '0').attr('y2', '1');
-groundGrad.append('stop').attr('offset', '0%').attr('stop-color', '#0a0c14').attr('stop-opacity', 0.0);
-groundGrad.append('stop').attr('offset', '14%').attr('stop-color', '#0a0c14').attr('stop-opacity', 0.45);
-groundGrad.append('stop').attr('offset', '100%').attr('stop-color', '#04050a').attr('stop-opacity', 0.95);
-
-povGround = g.append('g').attr('id', 'povGround').style('display', 'none');
-
-defs.append('clipPath')
-  .attr('id', 'floorClip')
-  .append('rect')
-  .attr('id', 'floorClipRect')
-  .attr('x', -W).attr('y', cy).attr('width', W*3).attr('height', H*2);
-
-povGround.append('use')
-  .attr('id', 'povReflection')
-  .attr('href', '#mapLayer')
-  .attr('clip-path', 'url(#floorClip)')
-  .attr('opacity', 0.6)
-  .style('pointer-events', 'none');
-
-povGround.append('rect').attr('class', 'pov-floor')
-  .attr('x', -W).attr('width', W*3).attr('y', cy).attr('height', H*2)
-  .attr('fill', 'url(#groundGrad)')
-  .style('pointer-events', 'none');
-
-povGround.lower();
-
-const allColors = [...colorScale.range(), '#ffd700', '#1a1a26'];
-allColors.forEach(c => {
-  const grad = defs.append('radialGradient')
-    .attr('id', 'glow-' + c.replace('#', ''))
-    .attr('cx', '50%').attr('cy', '50%').attr('r', '50%');
-    
-  grad.append('stop').attr('offset', '0%').attr('stop-color', '#fff').attr('stop-opacity', 1);
-  grad.append('stop').attr('offset', '15%').attr('stop-color', c).attr('stop-opacity', 0.8);
-  grad.append('stop').attr('offset', '50%').attr('stop-color', c).attr('stop-opacity', 0.3);
-  grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
-  
-  const sphereGrad = defs.append('radialGradient')
-    .attr('id', 'sphere-' + c.replace('#', ''))
-    .attr('cx', '35%').attr('cy', '35%').attr('r', '65%');
-    
-  sphereGrad.append('stop').attr('offset', '0%').attr('stop-color', '#ffffff').attr('stop-opacity', 0.8);
-  sphereGrad.append('stop').attr('offset', '20%').attr('stop-color', c).attr('stop-opacity', 1);
-  sphereGrad.append('stop').attr('offset', '100%').attr('stop-color', d3.color(c).darker(1.5)).attr('stop-opacity', 1);
-});
-
-const metalGrad = defs.append('linearGradient')
-  .attr('id', 'metallic-crescent')
-  .attr('x1', '0%').attr('y1', '0%')
-  .attr('x2', '100%').attr('y2', '100%');
-
-metalGrad.append('stop').attr('offset',  '0%').attr('stop-color', '#3a2a00');
-metalGrad.append('stop').attr('offset', '18%').attr('stop-color', '#b8860b');
-metalGrad.append('stop').attr('offset', '38%').attr('stop-color', '#ffd700');
-metalGrad.append('stop').attr('offset', '52%').attr('stop-color', '#fffacd');
-metalGrad.append('stop').attr('offset', '62%').attr('stop-color', '#ffd700');
-metalGrad.append('stop').attr('offset', '80%').attr('stop-color', '#b8860b');
-metalGrad.append('stop').attr('offset','100%').attr('stop-color', '#3a2a00');
-
-const specFilter = defs.append('filter')
-  .attr('id', 'crescent-spec')
-  .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
-specFilter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'blur');
-const feMerge = specFilter.append('feMerge');
-feMerge.append('feMergeNode').attr('in', 'blur');
-feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
-
-const staticFilter = defs.append('filter')
-  .attr('id', 'tvStatic')
-  .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-  
-staticFilter.append('feTurbulence')
-  .attr('id', 'noiseGen')
-  .attr('type', 'fractalNoise')
-  .attr('baseFrequency', '0.9')
-  .attr('numOctaves', '3')
-  .attr('seed', '0')
-  .attr('result', 'noise');
-
-staticFilter.append('feDisplacementMap')
-  .attr('id', 'glitchDisplacement')
-  .attr('in', 'SourceGraphic')
-  .attr('in2', 'noise')
-  .attr('scale', '0')
-  .attr('xChannelSelector', 'R')
-  .attr('yChannelSelector', 'G');
-
-const LG = mapLayer.append('g');
-const NG = mapLayer.append('g');
-ringFx = g.append('g').attr('id', 'ringFx').style('pointer-events', 'none');
-starFx = g.append('g').attr('id', 'starFx').style('pointer-events', 'none');
 
 let tipTimeout;
 const tipEl = document.getElementById('tip');
@@ -1664,420 +801,347 @@ tipEl.addEventListener('mouseleave', () => hideTip());
 function showTip(e, d){
   clearTimeout(tipTimeout);
   const c = bcolor(d);
-  let linkHtml = '';
-  let imgHtml = '';
-
+  let linkHtml = ''; let imgHtml = '';
   if (d.id !== 'root') {
     const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
-    const jpgUrl = `${sbBase}/${d.id}.jpg`;
-    const pngUrl = `${sbBase}/${d.id}.png`;
-
-    imgHtml = `
-      <div style="margin-bottom:10px;border-radius:8px;overflow:hidden;display:flex;
-                  justify-content:center;align-items:center;background:rgba(0,0,0,0.6);
-                  box-shadow:inset 0 0 12px rgba(0,0,0,0.9);min-height:80px;">
-        <img src="${jpgUrl}"
-             onerror="if(this.getAttribute('data-tried-png')!=='1'){this.setAttribute('data-tried-png','1');this.src='${pngUrl}';}else{this.parentElement.style.display='none';}"
-             style="max-width:200px;max-height:150px;width:auto;height:auto;
-                    object-fit:contain;display:block;border-radius:4px;" />
-      </div>
-    `;
-
-    linkHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);">
-      <a href="https://db.netkeiba.com/horse/${d.id}" target="_blank"
-         style="color:#00ffcc;text-decoration:none;font-size:11px;font-family:monospace;text-shadow:0 0 5px rgba(0,255,204,0.5);">
-        View on Netkeiba ↗
-      </a></div>`;
+    imgHtml = `<div style="margin-bottom:10px;border-radius:8px;overflow:hidden;display:flex;justify-content:center;align-items:center;background:rgba(0,0,0,0.6);box-shadow:inset 0 0 12px rgba(0,0,0,0.9);min-height:80px;"><img src="${sbBase}/${d.id}.jpg" onerror="if(this.getAttribute('data-tried-png')!=='1'){this.setAttribute('data-tried-png','1');this.src='${sbBase}/${d.id}.png';}else{this.parentElement.style.display='none';}" style="max-width:200px;max-height:150px;width:auto;height:auto;object-fit:contain;display:block;border-radius:4px;" /></div>`;
+    linkHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);"><a href="https://db.netkeiba.com/horse/${d.id}" target="_blank" style="color:#00ffcc;text-decoration:none;font-size:11px;font-family:monospace;text-shadow:0 0 5px rgba(0,255,204,0.5);">View on Netkeiba ↗</a></div>`;
   }
-
-  tipEl.innerHTML =
-    imgHtml +
-    `<div style="font-weight:700;color:${c};font-size:15px;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.name}</div>` +
-    (d.data.g1 ? `<div style="color:${c};font-size:22px;font-family:monospace;line-height:1;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.g1} G1</div>` : '') +
-    (d.data.era ? `<div style="color:#8888aa;font-size:12px">${d.data.era}</div>` : '') +
-    (d._children && d.id !== 'root' ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') +
-    linkHtml;
-
+  tipEl.innerHTML = imgHtml + `<div style="font-weight:700;color:${c};font-size:15px;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.name}</div>` + (d.data.g1 ? `<div style="color:${c};font-size:22px;font-family:monospace;line-height:1;margin-bottom:4px;text-shadow:0 0 10px ${c};">${d.data.g1} G1</div>` : '') + (d.data.era ? `<div style="color:#8888aa;font-size:12px">${d.data.era}</div>` : '') + (d._children && d.id !== 'root' ? `<div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px">${d.children ? 'Drag or click ↑' : 'Drag or click ↓'} (${d._children.length})</div>` : '') + linkHtml;
   tipEl.style.opacity = '1';
   tipEl.style.left = (e.clientX + 15) + 'px';
-  
-  if (e.clientY > window.innerHeight - 250) {
-    tipEl.style.top = (e.clientY - tipEl.offsetHeight - 15) + 'px';
-  } else {
-    tipEl.style.top = (e.clientY + 15) + 'px';
+  tipEl.style.top = (e.clientY > window.innerHeight - 250) ? (e.clientY - tipEl.offsetHeight - 15) + 'px' : (e.clientY + 15) + 'px';
+}
+function hideTip() { tipTimeout = setTimeout(() => { tipEl.style.opacity = '0'; setTimeout(() => { if (tipEl.style.opacity === '0') tipEl.style.left = '-9999px'; }, 200); }, 250); }
+
+const colorScale = d3.scaleOrdinal(['#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500','#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222']);
+function bcolor(d) { if (d.id === 'root') return '#ffd700'; let c = d; while (c.parent && c.parent.id !== 'root') c = c.parent; return colorScale(c.id); }
+function nodeR(d) { if (d.id === 'root') return 34; const g1 = d.data.g1 || 0; if (g1 >= 10) return 22; if (g1 >= 7) return 18; if (g1 >= 4) return 14; if (g1 >= 1) return 11; return 7; }
+const RADII = [0, 160, 340, 520, 700, 880, 1060];
+
+function ringAz(d) { return d.x + (isDiffSpinOn ? ringPhase * d.depth : 0); }
+
+function spawnShootingStars(strength, held = false){
+  if (shootingStars.length > 60) return; 
+  const n = held ? 1 : 0; 
+  for (let k = 0; k < n; k++) {
+    shootingStars.push({ id: Math.random().toString(36).slice(2), ang: Math.random() * Math.PI * 2, r: 30, speed: 12 + strength * 20, len: 20, op: 1.5, held: held });
   }
 }
 
-function hideTip(){
-  tipTimeout = setTimeout(() => {
-    tipEl.style.opacity = '0';
-    setTimeout(() => { if (tipEl.style.opacity === '0') tipEl.style.left = '-9999px'; }, 200);
-  }, 250);
+function spawnCenterRing(strength){
+  if (centerRings.length > 30) return;
+  centerRings.push({ id: Math.random().toString(36).slice(2), r: 18, op: 1, w: 2 + strength * 5 });
 }
 
-const specLine = d3.line().curve(d3.curveCatmullRom.alpha(0.5));
+function traverseAll(node, callback) { callback(node); if (node._children) node._children.forEach(c => traverseAll(c, callback)); }
 
-function linkPath(s, t) {
-  if (is8Bit) {
-    const sx = Math.round(s.cartX / 4) * 4, sy = Math.round(s.cartY / 4) * 4;
-    const tx = Math.round(t.cartX / 4) * 4, ty = Math.round(t.cartY / 4) * 4;
-    return `M${sx},${sy}L${tx},${ty}`;
-  }
-  const mx  = (s.cartX + t.cartX) / 2;
-  const my  = (s.cartY + t.cartY) / 2;
-  const dx  = t.cartX - s.cartX;
-  const dy  = t.cartY - s.cartY;
-  const len = Math.sqrt(dx * dx + dy * dy) || 1;
-  let bow = len * 0.08;
-
-  if (isSpectrumOn) {
-    const segments = 24;
-    const angle = Math.atan2(dy, dx);
-    const phase = globalTime * 0.004 * spectrumSpeed;
-    const fLen  = (specSmooth && specSmooth.length) ? specSmooth.length : 64;
-    const safeDepth = Math.max(1, maxDepth);
-    const startBin  = Math.floor((s.depth / safeDepth) * fLen * 0.45);
-    const winBins   = Math.max(6, Math.floor(fLen * 0.22));
-
-    const pts = [[s.cartX, s.cartY]];
-    for (let i = 1; i < segments; i++) {
-      const pct = i / segments;
-      const baseX = s.cartX + dx * pct;
-      const baseY = s.cartY + dy * pct;
-
-      let amp = 5;
-      let jitter = 0;
-      if (specSmooth) {
-        const fpos = startBin + pct * winBins;
-        const b0 = Math.min(fLen - 1, Math.floor(fpos));
-        const b1 = Math.min(fLen - 1, b0 + 1);
-        const fr = fpos - b0;
-        
-        amp += (specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr) * 180;
-        jitter = (Math.random() - 0.5) * (specSmooth[b0] || 0) * 60;
-      }
-
-      const taper = Math.sin(pct * Math.PI);
-      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - phase * 2);
-      const off   = (amp * taper * flow) + (jitter * taper);
-
-      pts.push([baseX - Math.sin(angle) * off, baseY + Math.cos(angle) * off]);
-    }
-    pts.push([t.cartX, t.cartY]);
-    return specLine(pts);
-  }
-
-  return `M${s.cartX},${s.cartY}Q${mx - dy/len*bow},${my + dx/len*bow} ${t.cartX},${t.cartY}`;
+function resetTree() {
+  if (!root) return;
+  const slider = document.getElementById('levelSlider'); slider.value = 1; onLevelSlide(1);
+  isSpinOn = false; mapAngle = 0;
+  const spinBtn = document.getElementById('spinBtn'); spinBtn.textContent = 'OFF'; spinBtn.style.color = ''; spinBtn.style.borderColor = '';
+  canvas.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(cx, cy).scale(0.3).translate(-cx, -cy));
 }
-
-function redrawLinksFast() {
-  (linkSel || LG.selectAll('path')).attr('d', d => linkPath(d.source, d.target));
-}
-
-let isDragging = false;
 
 function update(source) {
   if (!root) return;
   const tree = d3.tree().size([2 * Math.PI, 680]);
   tree(root);
-
   const nodes = root.descendants();
-  const links = root.links();
-
   nodes.forEach(d => {
     d.y = RADII[Math.min(d.depth, RADII.length - 1)] * spreadFactor;
-    if (d.data.ox != null) {
-      d.cartX = d.data.ox;
-      d.cartY = d.data.oy;
+    if (d.data.ox != null) { d.cartX = d.data.ox; d.cartY = d.data.oy; }
+    else { d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2); d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2); }
+    d.cartX0 = d.cartX; d.cartY0 = d.cartY;
+  });
+  simulationTree = d3.quadtree().x(d => d.cartX).y(d => d.cartY).addAll(nodes);
+  if (isFloatOn && floatSim) { floatSim.nodes(nodes); floatSim.alpha(0.5).restart(); }
+}
+
+function project3D(nodes, maxR) {
+  const cyaw = Math.cos(yaw3d), syaw = Math.sin(yaw3d);
+  const cpit = Math.cos(pitch3d), spit = Math.sin(pitch3d);
+  nodes.forEach(d => {
+    const a = ringAz(d);
+    const lx = d.y * Math.cos(a - Math.PI / 2);
+    const ly = d.y * Math.sin(a - Math.PI / 2);
+    const lz = (1 - d.y / maxR) * bulge3d;
+    const x1 = lx * cyaw + lz * syaw;
+    const z1 = -lx * syaw + lz * cyaw;
+    const y2 = ly * cpit - z1 * spit;
+    const z2 = ly * spit + z1 * cpit;
+    let denom = focal3d - z2; if (denom < 60) denom = 60;
+    const persp = focal3d / denom;
+    d.cartX = cx + x1 * persp; d.cartY = cy + y2 * persp;
+    if (is8Bit) { d.cartX = Math.round(d.cartX / 4) * 4; d.cartY = Math.round(d.cartY / 4) * 4; }
+    d._z3 = z2; d._persp = persp; d._vis3 = true;
+  });
+}
+
+function projectPOV(nodes, maxR) {
+  const focal = 820; const near = 35; const camY = 26 + bulge3d * 0.45;
+  const cyaw = Math.cos(lookYaw), syaw = Math.sin(lookYaw);
+  const cpit = Math.cos(lookPitch), spit = Math.sin(lookPitch);
+  nodes.forEach(d => {
+    const t = maxR > 0 ? d.y / maxR : 0;
+    const az = ringAz(d) + povSpin;
+    let dist = d.depth === 0 ? 130 : 240 + t * 2000;
+    let elev = d.depth === 0 ? -0.6 : Math.pow(t, 0.85) * (Math.PI / 2) * 0.96;
+    const wx = dist * Math.cos(elev) * Math.cos(az);
+    const wz = dist * Math.cos(elev) * Math.sin(az);
+    const wy = dist * Math.sin(elev);
+    const relx = wx, rely = wy - camY, relz = wz;
+    const x1 = cyaw * relx - syaw * relz;
+    const z1 = syaw * relx + cyaw * relz;
+    const y2 = cpit * rely + spit * z1;
+    const z2 = -spit * rely + cpit * z1;
+    if (z2 > near) {
+      const persp = focal / z2;
+      d.cartX = cx + x1 * persp; d.cartY = cy - y2 * persp;
+      if (is8Bit) { d.cartX = Math.round(d.cartX / 4) * 4; d.cartY = Math.round(d.cartY / 4) * 4; }
+      d._z3 = z2; d._persp = Math.min(7, persp); d._vis3 = true;
     } else {
-      d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2);
-      d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2);
+      d._vis3 = false; d._z3 = z2; d.cartX = NaN; d.cartY = NaN; d._persp = 0;
+    }
+  });
+}
+
+function renderCanvas() {
+  if (!root) return;
+  const nodes = root.descendants();
+  const links = root.links();
+  
+  if (isFloatOn || is3DOn || isSpinOn || isDiffSpinOn) {
+    simulationTree = d3.quadtree().x(d => d.cartX).y(d => d.cartY).addAll(nodes.filter(n => !is3DOn || n._vis3));
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  
+  if (is3DOn && povMode) {
+    const horizonY = cy - focal3d * Math.tan(lookPitch);
+    const floorY = Math.max(-H, Math.min(H * 2, horizonY));
+    const grad = ctx.createLinearGradient(0, floorY, 0, floorY + H);
+    grad.addColorStop(0, "rgba(10, 12, 20, 0.45)");
+    grad.addColorStop(1, "rgba(4, 5, 10, 0.95)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, floorY, W, H*2);
+  }
+
+  ctx.save();
+  ctx.translate(zoomT.x + shakeX, zoomT.y + shakeY);
+  ctx.scale(zoomT.k, zoomT.k);
+  if (shakeR) ctx.rotate(shakeR * Math.PI / 180);
+  if (isSpinOn && !is3DOn) {
+    ctx.translate(cx, cy); ctx.rotate(mapAngle * Math.PI / 180); ctx.translate(-cx, -cy);
+  }
+
+  ctx.lineWidth = isReactLinksOn ? 2 + smoothedEnergy * 10 : 2.5;
+  ctx.strokeStyle = `rgba(255, 255, 255, ${isReactLinksOn ? 0.2 + smoothedEnergy * 0.8 : 0.15})`;
+  
+  links.forEach(link => {
+    if (is3DOn && (!link.source._vis3 || !link.target._vis3)) return;
+    let sx = link.source.cartX, sy = link.source.cartY;
+    let tx = link.target.cartX, ty = link.target.cartY;
+    if (isSpectrumOn && specSmooth && !is3DOn && !is8Bit) {
+      const dx = tx - sx, dy = ty - sy; const len = Math.sqrt(dx*dx + dy*dy) || 1;
+      const angle = Math.atan2(dy, dx);
+      ctx.beginPath(); ctx.moveTo(sx, sy);
+      for (let i = 1; i < 24; i++) {
+        const pct = i / 24; const fpos = Math.floor((link.source.depth / Math.max(1, maxDepth)) * specSmooth.length * 0.45) + pct * 6;
+        const b = Math.min(specSmooth.length - 1, Math.floor(fpos));
+        const off = (5 + specSmooth[b] * 180) * Math.sin(pct * Math.PI) * (0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - globalTime * 0.004 * spectrumSpeed));
+        ctx.lineTo(sx + dx * pct - Math.sin(angle) * off, sy + dy * pct + Math.cos(angle) * off);
+      }
+      ctx.lineTo(tx, ty); ctx.stroke();
+    } else {
+      if (is8Bit) {
+        ctx.beginPath(); ctx.moveTo(Math.round(sx/4)*4, Math.round(sy/4)*4); ctx.lineTo(Math.round(tx/4)*4, Math.round(ty/4)*4); ctx.stroke();
+      } else {
+        const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+        const dx = tx - sx, dy = ty - sy; const len = Math.sqrt(dx*dx + dy*dy) || 1; const bow = len * 0.08;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(mx - dy/len*bow, my + dx/len*bow, tx, ty); ctx.stroke();
+      }
     }
   });
 
-  const nd = NG.selectAll('g.nd').data(nodes, d => d.id);
+  let drawNodes = nodes;
+  if (is3DOn) drawNodes = nodes.slice().sort((a, b) => (a._z3 || 0) - (b._z3 || 0));
 
-  const drag = d3.drag()
-    .subject((e, d) => ({ x: d.cartX, y: d.cartY }))
-    .on('start', (e, d) => { 
-      isDragging = false; 
-      e.sourceEvent.stopPropagation(); 
-      if (isFloatOn && floatSim) floatSim.alphaTarget(0.3).restart();
-    })
-    .on('drag',  (e, d) => {
-      isDragging = true;
-      if (is3DOn) {
-        const mx = (e.sourceEvent.movementX || 0) * 0.006;
-        const my = (e.sourceEvent.movementY || 0) * 0.006;
-        if (povMode) {
-          lookYaw   += mx;
-          lookPitch += my;
-          lookPitch  = Math.max(-1.5, Math.min(1.5, lookPitch));
-        } else {
-          yaw3d   += mx;
-          pitch3d += my;
-          pitch3d  = Math.max(-1.4, Math.min(1.4, pitch3d));
-          const ts = document.getElementById('tiltSlider');
-          if (ts) { ts.value = pitch3d; setTilt(pitch3d); }
-        }
-        return;
-      }
-      d.data.ox = e.x; d.data.oy = e.y;
-      d.cartX = e.x;   d.cartY = e.y;
-      
-      if (isFloatOn) {
-        d.fx = e.x;
-        d.fy = e.y;
-      } else {
-        d3.select(NG.selectAll('g.nd').filter(n => n.id === d.id).node())
-          .attr('transform', `translate(${d.cartX},${d.cartY})`);
-        redrawLinksFast();
-      }
-    })
-    .on('end', (e, d) => {
-      if (is3DOn) {
-        if (!isDragging && d._children) {
-          d.children = d.children ? null : d._children;
-          update(d);
-        }
-        return;
-      }
-      if (isFloatOn) {
-        d.fx = null;
-        d.fy = null;
-        if (floatSim) floatSim.alphaTarget(0);
-      }
-      if (!isDragging && d._children) {
-        d.children = d.children ? null : d._children;
-        d.data.ox = null; d.data.oy = null;
-        update(d);
-      }
+  drawNodes.forEach(d => {
+    if (is3DOn && !d._vis3) return;
+    let scale = is3DOn && d._persp ? d._persp : 1;
+    let baseR = nodeR(d) * scale;
+    let finalRadius = baseR * (1 + (hasAudioData && depthFreqs[d.depth] ? depthFreqs[d.depth] * 0.3 : 0));
+
+    if (glowMode === 'manual' && manualGlowVal > 0 && !is8Bit) {
+        ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius * (1 + manualGlowVal * 0.3), 0, Math.PI * 2);
+        ctx.fillStyle = bcolor(d); ctx.globalAlpha = manualGlowVal * 0.15; ctx.fill(); ctx.globalAlpha = 1.0;
+    }
+
+    ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius, 0, Math.PI * 2);
+    if (d.id === 'root') {
+      ctx.fillStyle = '#ffd700'; ctx.fill(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * scale; ctx.stroke();
+    } else {
+      if (d.data.g1 > 0 && !is8Bit) {
+        const cached = getHorseImage(d.id);
+        if (cached.loaded && !cached.failed) {
+          ctx.save(); ctx.clip();
+          ctx.drawImage(cached.img, d.cartX - finalRadius, d.cartY - finalRadius, finalRadius * 2, finalRadius * 2);
+          ctx.restore();
+          ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = bcolor(d); ctx.lineWidth = 2 * scale; ctx.stroke();
+        } else { ctx.fillStyle = '#1a1a26'; ctx.fill(); ctx.strokeStyle = bcolor(d); ctx.stroke(); }
+      } else { ctx.fillStyle = '#1a1a26'; ctx.fill(); ctx.strokeStyle = bcolor(d); ctx.stroke(); }
+    }
+
+    ctx.fillStyle = d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)';
+    ctx.font = `${d.data.g1 >= 5 ? 800 : 600} ${is8Bit ? 11 : 11 * scale}px ${is8Bit ? 'monospace' : 'system-ui'}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(d.data.name, d.cartX, d.cartY + finalRadius + (16 * scale));
+    if (d.data.g1 >= 2 && !is8Bit) {
+      ctx.fillStyle = '#ffffff'; ctx.font = `800 ${11 * scale}px monospace`;
+      ctx.fillText(d.data.g1 + 'G1', d.cartX, d.cartY - finalRadius - (6 * scale));
+    }
+    
+    if (d === hoveredNode && !is8Bit) {
+      ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius * 1.2, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  });
+
+  let ax = root ? root.cartX : cx, ay = root ? root.cartY : cy;
+  if (!is3DOn) {
+    shootingStars.forEach(s => {
+      ctx.beginPath();
+      ctx.moveTo(ax + Math.cos(s.ang) * Math.max(0, s.r - s.len), ay + Math.sin(s.ang) * Math.max(0, s.r - s.len));
+      ctx.lineTo(ax + Math.cos(s.ang) * s.r, ay + Math.sin(s.ang) * s.r);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 + 4 * s.op; ctx.globalAlpha = Math.min(1, Math.max(0, s.op)); ctx.stroke();
     });
-
-  const enter = nd.enter().append('g').attr('class', 'nd')
-    .attr('transform', d => `translate(${source.cartX0 || cx},${source.cartY0 || cy})`)
-    .call(drag)
-    .on('mouseover', (e, d) => {
-      showTip(e, d);
-      if (d.id === 'root') {
-          d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('transform', 'scale(1.2)');
-      } else {
-          d3.select(e.currentTarget).select('.main-node').transition().duration(200).attr('r', nodeR(d) * 1.3);
-      }
-    })
-    .on('mouseout', (e, d) => {
-      hideTip();
-      if (d.id === 'root') {
-          d3.select(e.currentTarget).select('.main-node').transition().duration(250).attr('transform', 'scale(1)');
-      } else {
-          d3.select(e.currentTarget).select('.main-node').transition().duration(250).attr('r', nodeR(d));
-      }
-    })
-    .attr('opacity', 0);
-
-  const inner = enter.append('g').attr('class', 'node-inner');
-
-  inner.append('circle')
-    .attr('class', 'aura')
-    .attr('r', d => nodeR(d) * 4.5)
-    .attr('fill', d => `url(#glow-${bcolor(d).replace('#', '')})`)
-    .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null)
-    .attr('opacity', 0)
-    .style('pointer-events', 'none');
-
-  inner.filter(d => d.id === 'root')
-    .append('g')
-    .attr('class', 'ripple-group')
-    .style('pointer-events', 'none');
-
-  inner.filter(d => d.id === 'root')
-    .append('path')
-    .attr('class', 'main-node')
-    .attr('d', d => getStarPath(0, 0, 7, nodeR(d) * 1.4, nodeR(d) * 0.6))
-    .attr('fill', d => bcolor(d))
-    .attr('stroke', '#fff')
-    .attr('stroke-width', 1.5);
-
-  inner.filter(d => d.id !== 'root')
-    .append('circle')
-    .attr('class', 'main-node')
-    .attr('r', d => nodeR(d))
-    .attr('fill', d => (d.data.g1 > 0) ? `url(#sphere-${bcolor(d).replace('#', '')})` : '#1a1a26')
-    .attr('stroke', d => bcolor(d));
-
-  inner.filter(d => d.id !== 'root')
-    .each(function(d) {
-      const r   = nodeR(d);
-      const cid = `img-clip-${d.id}`;
-
-      if (defs.select('#' + cid).empty()) {
-        defs.append('clipPath').attr('id', cid)
-          .append('circle').attr('r', r - 1.5);
-      }
-
-      const sbBase = `${supabaseUrl}/storage/v1/object/public/horse_pics`;
-      const jpgUrl = `${sbBase}/${d.id}.jpg`;
-      const pngUrl = `${sbBase}/${d.id}.png`;
-
-      const img = d3.select(this).append('image')
-        .attr('class', 'horse-photo')
-        .attr('href', jpgUrl)
-        .attr('x', -r + 1.5).attr('y', -r + 1.5)
-        .attr('width', (r - 1.5) * 2).attr('height', (r - 1.5) * 2)
-        .attr('clip-path', `url(#${cid})`)
-        .attr('preserveAspectRatio', 'xMidYMid slice')
-        .style('pointer-events', 'none');
-
-      img.node().onerror = function() {
-        if (this.getAttribute('href') === jpgUrl) {
-          this.setAttribute('href', pngUrl);
-        } else {
-          this.style.display = 'none';
-        }
-      };
-
-      d3.select(this).append('circle')
-        .attr('class', 'photo-ring')
-        .attr('r', r)
-        .attr('fill', 'none')
-        .attr('stroke', bcolor(d))
-        .attr('stroke-width', 2)
-        .style('pointer-events', 'none');
+    ctx.globalAlpha = 1.0;
+    centerRings.forEach(r => {
+      ctx.beginPath(); ctx.arc(ax, ay, r.r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = r.w * Math.max(0.35, r.op); ctx.globalAlpha = Math.min(1, Math.max(0, r.op)); ctx.stroke();
     });
-
-  inner.filter(d => d.id !== 'root')
-    .append('text').text(d => d.data.name)
-    .attr('dy', d => nodeR(d) + 16).attr('text-anchor', 'middle')
-    .attr('font-size', d => (d.data.g1 >= 5 ? '13px' : '11px'))
-    .attr('font-weight', d => (d.data.g1 >= 5 ? '800' : '600'))
-    .attr('fill', d => (d.data.g1 > 0 ? bcolor(d) : 'rgba(255,255,255,0.8)'))
-    .attr('pointer-events', 'none')
-    .style('text-shadow', d => d.data.g1 > 0 ? `0 0 10px ${bcolor(d)}` : 'none');
-
-  inner.filter(d => d.data.g1 >= 2).append('text')
-    .text(d => d.data.g1 + 'G1')
-    .attr('dy', d => -nodeR(d) - 8).attr('text-anchor', 'middle')
-    .attr('font-size', '11px').attr('font-family', 'monospace').attr('font-weight', '800')
-    .attr('fill', '#fff')
-    .attr('pointer-events', 'none')
-    .style('text-shadow', d => `0 0 8px ${bcolor(d)}, 0 0 15px ${bcolor(d)}`);
-
-  inner.filter(d => d._children && d.id !== 'root').append('text')
-    .attr('class', 'pm')
-    .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
-    .attr('font-size', '14px').attr('font-weight', 'bold')
-    .attr('fill', d => bcolor(d)).attr('fill-opacity', 0.8)
-    .attr('pointer-events', 'none')
-    .text(d => d.children ? '-' : '+');
-
-  const updateNodes = enter.merge(nd);
-  updateNodes.transition().duration(400)
-    .attr('transform', d => `translate(${d.cartX},${d.cartY})`)
-    .attr('opacity', 1);
-  updateNodes.select('text.pm').text(d => d.children ? '-' : '+');
-
-  nd.exit().transition().duration(400)
-    .attr('transform', d => `translate(${source.cartX},${source.cartY})`)
-    .attr('opacity', 0).remove();
-
-  const lk = LG.selectAll('path').data(links, d => d.source.id + '-' + d.target.id);
-  
-  lk.enter().append('path')
-    .attr('fill', 'none')
-    .attr('stroke', d => bcolor(d.target))
-    .attr('stroke-width', d => d.source.id === 'root' ? 4 : 2.5)
-    .attr('stroke-opacity', 0)
-    .attr('d', d => {
-      const o = { cartX: source.cartX0 || cx, cartY: source.cartY0 || cy, depth: 0 };
-      return linkPath(o, o);
-    })
-    .merge(lk)
-    .transition().duration(400)
-    .attr('d', d => linkPath(d.source, d.target));
-
-  lk.exit().transition().duration(400)
-    .attr('stroke-opacity', 0)
-    .attr('d', d => {
-      const o = { cartX: source.cartX, cartY: source.cartY, depth: 0 };
-      return linkPath(o, o);
-    }).remove();
-
-  nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
-
-  cachedInner = NG.selectAll('g.node-inner');
-  cachedNd    = NG.selectAll('g.nd');
-  linkSel     = LG.selectAll('path');
-  rippleGroup = cachedNd.filter(d => d.id === 'root').select('.ripple-group');
-  cachedInner.each(function(d){ d._auraEl = undefined; d._mainEl = undefined; });
-
-  if (glowMode === 'manual') applyStaticGlow(manualGlowVal);
-
-  if (isFloatOn && floatSim) {
-    const currentNodes = root.descendants();
-    floatSim.nodes(currentNodes);
-    currentNodes.forEach(d => {
-      if (d.x === undefined || isNaN(d.x)) {
-         d.x = source.cartX0 || cx; 
-         d.y = source.cartY0 || cy;
-         d.vx = 0; d.vy = 0;
-      }
-    });
-    floatSim.alpha(0.5).restart();
+    ctx.globalAlpha = 1.0;
   }
+  ctx.restore();
 }
 
-function traverseAll(node, callback) {
-  callback(node);
-  if (node._children) node._children.forEach(c => traverseAll(c, callback));
-}
+d3.timer(elapsed => {
+  globalTime = elapsed;
+  _frame++;
+  if (is8Bit && (_frame % 3 !== 0)) return;
 
-function resetTree(){
-  if (!root) return;
-  const slider = document.getElementById('levelSlider');
-  slider.value = 1;
-  onLevelSlide(1);
+  if (isSpinOn && !is3DOn) mapAngle += spinSpeed * 0.2;
 
-  isSpinOn = false;
-  mapAngle = 0;
-  
-  const spinBtn = document.getElementById('spinBtn');
-  spinBtn.textContent = 'OFF';
-  spinBtn.style.color = '';
-  spinBtn.style.borderColor = '';
-  
-  d3.select('#mapLayer').transition().duration(600).attr('transform', `rotate(0, ${cx}, ${cy})`);
-  
-  svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.3).translate(-W/2, -H/2));
-}
+  let hasAudioData = false;
+  if (isAudioPlaying && analyser) {
+    analyser.getByteFrequencyData(dataArray);
+    hasAudioData = true;
+    let lsum = 0, llim = Math.floor(dataArray.length * 0.5);
+    for (let i = 0; i < llim; i++) lsum += dataArray[i];
+    const rawLevel = (lsum / llim) / 255;
+    audioLevel += (rawLevel - audioLevel) * 0.3;
+    smoothedEnergy += (Math.min(1, rawLevel) - smoothedEnergy) * 0.3;
+
+    if (isDiffSpinOn) ringPhase += diffSpinSpeed * 0.004 * (0.25 + audioLevel * 1.6);
+    if (isSpectrumOn) {
+      if (!specSmooth || specSmooth.length !== dataArray.length) specSmooth = new Float32Array(dataArray.length);
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 255; specSmooth[i] += (v - specSmooth[i]) * (v > specSmooth[i] ? 0.55 : 0.12);
+      }
+    }
+
+    if (bpmStarsOn) {
+      if (smoothedEnergy > 0.22) {
+        if (shootingStars.filter(s => s.held).length < 4) spawnShootingStars(smoothedEnergy, true);
+        shootingStars.forEach(s => { if (s.held) { s.len = Math.min(800, s.len + 12 * starSpeedMul); s.r += s.speed * 0.3 * starSpeedMul; s.op = 1.5; }});
+      } else {
+        shootingStars.forEach(s => { if (s.held) { s.held = false; s.speed += 5; }});
+      }
+    }
+
+    if (centerRingsOn) {
+      if (ringCooldown > 0) ringCooldown--;
+      if (smoothedEnergy > 0.14 && smoothedEnergy > ringEnvPrev * 1.15 && ringCooldown <= 0) { spawnCenterRing(smoothedEnergy); ringCooldown = 6; }
+      ringEnvPrev = smoothedEnergy;
+    }
+
+    if (isShakeOn) {
+      const transient = Math.max(0, rawLevel - shakeEnergy);
+      shakeEnergy += (rawLevel - shakeEnergy) * 0.35;
+      const amp = ((shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6) * shakeSens;
+      const speed = 0.04;
+      shakeX = Math.sin(globalTime * speed) * amp + Math.sin(globalTime * speed * 2.3) * (amp * 0.5);
+      shakeY = Math.cos(globalTime * speed * 1.1) * amp + Math.sin(globalTime * speed * 1.7) * (amp * 0.5);
+      shakeR = Math.sin(globalTime * speed * 0.8) * amp * 0.08;
+    } else { shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; }
+
+    const safeDepth = Math.max(1, maxDepth);
+    for (let i = 0; i <= safeDepth; i++) {
+      let binIndex = Math.floor((i / safeDepth) * (dataArray.length * 0.6));
+      if (binIndex > dataArray.length - 1) binIndex = dataArray.length - 1;
+      depthFreqs[i] = dataArray[binIndex] / 255;
+    }
+
+  } else {
+    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; audioLevel *= 0.9; smoothedEnergy *= 0.9;
+    depthFreqs = [];
+  }
+
+  const maxReach = Math.hypot(W, H) * 0.75;
+  for (let i = shootingStars.length - 1; i >= 0; i--) {
+    const s = shootingStars[i];
+    if (!s.held) { s.r += s.speed * starSpeedMul; s.op -= 0.015; }
+    if (s.op <= 0 || (s.r - s.len) > maxReach) shootingStars.splice(i, 1);
+  }
+
+  const farEdge = Math.hypot(W, H) * 0.55;
+  const nearEdge = Math.min(W, H) * 0.5;
+  const ringSpeed = farEdge / 80;
+  for (let i = centerRings.length - 1; i >= 0; i--) {
+    const ring = centerRings[i]; ring.r += ringSpeed;
+    if (ring.r > nearEdge) ring.op = Math.max(0, 1 - (ring.r - nearEdge) / (farEdge - nearEdge));
+    if (ring.op <= 0 || ring.r >= farEdge) centerRings.splice(i, 1);
+  }
+
+  if (is3DOn && root) {
+    const nodes = root.descendants();
+    let maxR = 1; nodes.forEach(d => { if (d.y > maxR) maxR = d.y; });
+    if (povMode) {
+      const ls = 0.035;
+      if (keys['a'] || keys['arrowleft']) lookYaw -= ls; if (keys['d'] || keys['arrowright']) lookYaw += ls;
+      if (keys['w'] || keys['arrowup']) lookPitch -= ls; if (keys['s'] || keys['arrowdown']) lookPitch += ls;
+      lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch));
+      povSpin += spin3dSpeed * 0.01;
+      projectPOV(nodes, maxR);
+    } else {
+      if (!orbit3d) yaw3d += spin3dSpeed * 0.01;
+      project3D(nodes, maxR);
+    }
+  } else if (isDiffSpinOn && !isFloatOn && root) {
+    root.descendants().forEach(d => {
+      if (d.data.ox != null) return;
+      const a = ringAz(d);
+      d.cartX = cx + d.y * Math.cos(a - Math.PI / 2); d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
+    });
+  }
+
+  renderCanvas();
+});
 
 async function fetchData() {
   const welcome = document.getElementById('welcome');
-  welcome.style.display = 'block';
-  welcome.innerHTML = 'Fetching data from Supabase...<br>Hang tight.';
-
+  welcome.style.display = 'block'; welcome.innerHTML = 'Fetching data from Supabase...<br>Hang tight.';
   const { data: raw, error } = await db.from('pedigrees').select('*');
-
-  if (error) {
-    console.error(error);
-    welcome.innerHTML = 'Well, that failed. Check your console.';
-    return;
-  }
-
+  if (error) { console.error(error); welcome.innerHTML = 'Well, that failed. Check your console.'; return; }
   welcome.style.display = 'none';
-
-  if (!raw || raw.length === 0) {
-    alert('No data found in the pedigrees table.');
-    return;
-  }
-
+  if (!raw || raw.length === 0) { alert('No data found in the pedigrees table.'); return; }
   try {
-    const nodes    = {};
-    const g1Counts = {};
-    const eras     = {};
-
+    const nodes = {}; const g1Counts = {}; const eras = {};
     raw.forEach(d => {
-      const hId = d.horse_id;
-      if (!hId) return;
+      const hId = d.horse_id; if (!hId) return;
       g1Counts[hId] = (g1Counts[hId] || 0) + 1;
       if (d.race_date) {
         const year = parseInt(d.race_date.split('-')[0]);
@@ -2085,72 +1149,36 @@ async function fetchData() {
         else { eras[hId].min = Math.min(eras[hId].min, year); eras[hId].max = Math.max(eras[hId].max, year); }
       }
     });
-
     raw.forEach(d => {
-      const hId  = d.horse_id     ? String(d.horse_id).trim()     : null;
-      const sId  = d.sire_id      && d.sire_id      !== 'nan' ? String(d.sire_id).trim()      : null;
+      const hId = d.horse_id ? String(d.horse_id).trim() : null;
+      const sId = d.sire_id && d.sire_id !== 'nan' ? String(d.sire_id).trim() : null;
       const ssId = d.sire_sire_id && d.sire_sire_id !== 'nan' ? String(d.sire_sire_id).trim() : null;
-
-      if (ssId && !nodes[ssId])
-        nodes[ssId] = { id: ssId, pid: null, name: d.sire_sire_name?.trim() || 'Unknown', g1: 0, era: '' };
-
+      if (ssId && !nodes[ssId]) nodes[ssId] = { id: ssId, pid: null, name: d.sire_sire_name?.trim() || 'Unknown', g1: 0, era: '' };
       if (sId) {
         if (!nodes[sId]) nodes[sId] = { id: sId, pid: ssId || null, name: d.sire_name?.trim() || 'Unknown', g1: 0, era: '' };
         else if (!nodes[sId].pid && ssId) nodes[sId].pid = ssId;
       }
-
       if (hId) {
-        const eraObj = eras[hId];
-        const eraStr = eraObj
-          ? (eraObj.min === eraObj.max ? `${eraObj.min}` : `${eraObj.min}-${eraObj.max}`)
-          : '';
-        if (!nodes[hId]) {
-          nodes[hId] = { id: hId, pid: sId || null, name: d.horse_name?.trim() || 'Unknown', g1: g1Counts[hId], era: eraStr };
-        } else {
-          nodes[hId].era = eraStr;
-          nodes[hId].g1  = g1Counts[hId];
-          if (!nodes[hId].pid && sId) nodes[hId].pid = sId;
-        }
+        const eraObj = eras[hId]; const eraStr = eraObj ? (eraObj.min === eraObj.max ? `${eraObj.min}` : `${eraObj.min}-${eraObj.max}`) : '';
+        if (!nodes[hId]) nodes[hId] = { id: hId, pid: sId || null, name: d.horse_name?.trim() || 'Unknown', g1: g1Counts[hId], era: eraStr };
+        else { nodes[hId].era = eraStr; nodes[hId].g1 = g1Counts[hId]; if (!nodes[hId].pid && sId) nodes[hId].pid = sId; }
       }
     });
-
     const flatData = [{ id: 'root', pid: '', name: 'All Thoroughbreds', g1: 0, era: 'Origin' }];
-    Object.values(nodes).forEach(n => {
-      if (!n.pid || n.pid === n.id) n.pid = 'root';
-      flatData.push(n);
-    });
-
+    Object.values(nodes).forEach(n => { if (!n.pid || n.pid === n.id) n.pid = 'root'; flatData.push(n); });
     const stratify = d3.stratify().id(d => d.id).parentId(d => d.pid || null);
     root = stratify(flatData);
-
     root.each(d => { d._children = d.children; d.data.ox = null; d.data.oy = null; });
-    
-    maxDepth = 0;
-    root.each(d => { if (d.depth > maxDepth) maxDepth = d.depth; });
-    
+    maxDepth = 0; root.each(d => { if (d.depth > maxDepth) maxDepth = d.depth; });
     traverseAll(root, d => { if (d.id !== 'root') d.children = null; });
-
-    const slider = document.getElementById('levelSlider');
-    slider.max   = maxDepth;
-    slider.value = 1;
+    const slider = document.getElementById('levelSlider'); slider.max = maxDepth; slider.value = 1;
     document.getElementById('levelVal').textContent = '1 / ' + maxDepth;
-
     buildRankPanel(nodes);
-
-    root.cartX0 = cx; root.cartY0 = cy;
-    update(root);
-
-    svg.transition().duration(750)
-       .call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.3).translate(-W/2, -H/2));
-
-    document.getElementById('welcome').style.display = 'block';
-    document.getElementById('welcome').innerHTML = 'Data Loaded.<br>Drag an MP3 or Listen to Tab to play audio.';
-    setTimeout(() => { document.getElementById('welcome').style.display = 'none'; }, 4000);
-
-  } catch (err) {
-    alert('Error parsing database data. Check the console for details.');
-    console.error(err);
-  }
+    root.cartX0 = cx; root.cartY0 = cy; update(root);
+    canvas.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(cx, cy).scale(0.3).translate(-cx, -cy));
+    welcome.style.display = 'block'; welcome.innerHTML = 'Data Loaded.<br>Drag an MP3 or Listen to Tab to play audio.';
+    setTimeout(() => { welcome.style.display = 'none'; }, 4000);
+  } catch (err) { alert('Error parsing database data. Check the console for details.'); console.error(err); }
 }
 
 fetchData();
