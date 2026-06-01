@@ -338,6 +338,10 @@ let draggedNode = null;
 let depthFreqs = [];
 let hasAudioData = false;
 
+let allNodes = [];   // cached root.descendants() — rebuilt only in update()
+let allLinks = [];   // cached root.links()
+let _sorted  = null; // reusable z-sort buffer for 3D
+
 let globalTime    = 0;
 let glowMode      = 'manual';
 let manualGlowVal = 1.0;
@@ -878,10 +882,12 @@ function fillSphere(c, x, y, r) {
 }
 
 // Soft colored halo behind a node (replaces the crude shadowBlur glow).
+// In Audio glow mode the halo also gets a tv-static grain — but clipped to the
+// aura disk itself, so the noise lives on the auras and nowhere else.
 function drawAura(c, x, y, auraR, alpha, glitch) {
   if (alpha <= 0.01 || auraR <= 0) return;
   let ox = x, oy = y, sr = auraR;
-  if (glitch > 0.01) {                // tv-static style jitter in audio mode
+  if (glitch > 0.01) {                // jitter the whole halo (displacement feel)
     ox += (Math.random() - 0.5) * glitch * 14;
     oy += (Math.random() - 0.5) * glitch * 14;
     sr *= 1 + (Math.random() - 0.5) * glitch * 0.5;
@@ -892,6 +898,18 @@ function drawAura(c, x, y, auraR, alpha, glitch) {
   const s = sr / AURA_REF; ctx.scale(s, s);
   ctx.fillStyle = auraGrad(c);
   ctx.beginPath(); ctx.arc(0, 0, AURA_REF, 0, Math.PI * 2); ctx.fill();
+
+  // grain, clipped to this aura disk only
+  const k = zoomT.k || 1;
+  if (glitch > 0.02 && sr * k > 5) {
+    ctx.beginPath(); ctx.arc(0, 0, AURA_REF, 0, Math.PI * 2); ctx.clip();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = Math.min(0.85, alpha) * Math.min(1, glitch * 1.3);
+    ctx.imageSmoothingEnabled = false;
+    const nw = noiseCv.width, nh = noiseCv.height;
+    const sx = Math.random() * nw * 0.5, sy = Math.random() * nh * 0.5;   // random crop = animated static
+    ctx.drawImage(noiseCv, sx, sy, nw * 0.5, nh * 0.5, -AURA_REF, -AURA_REF, AURA_REF * 2, AURA_REF * 2);
+  }
   ctx.restore();
 }
 
@@ -946,7 +964,12 @@ function update(source) {
     if (d.data.ox != null) { d.cartX = d.data.ox; d.cartY = d.data.oy; }
     else { d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2); d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2); }
     d.cartX0 = d.cartX; d.cartY0 = d.cartY;
+    d._col = bcolor(d);      // cache colour (avoids parent-walk every frame)
+    d._r   = nodeR(d);       // cache radius
   });
+  allNodes = nodes;
+  allLinks = root.links();
+  _sorted  = null;          // node set changed → invalidate z-sort buffer
   simulationTree = d3.quadtree().x(d => d.cartX).y(d => d.cartY).addAll(nodes);
   if (isFloatOn && floatSim) { floatSim.nodes(nodes); floatSim.alpha(0.5).restart(); }
 }
@@ -1006,14 +1029,19 @@ function projectPOV(nodes, maxR) {
 
 function renderCanvas() {
   if (!root) return;
-  const nodes = root.descendants();
-  const links = root.links();
-  
-  if (isFloatOn || is3DOn || isSpinOn || isDiffSpinOn) {
+  const nodes = allNodes;
+  const links = allLinks;
+  const k = zoomT.k || 1;
+
+  // Hover quadtree only needs rebuilding while things move — throttle it.
+  if ((isFloatOn || is3DOn || isSpinOn || isDiffSpinOn) && (_frame % 2 === 0)) {
     simulationTree = d3.quadtree().x(d => d.cartX).y(d => d.cartY).addAll(nodes.filter(n => !is3DOn || n._vis3));
   }
 
   ctx.clearRect(0, 0, W, H);
+
+  // refresh the static tile so per-aura grain animates (Audio glow mode only)
+  if (glowMode === 'audio' && !is8Bit && glitchAmt > 0.02 && (_frame % 2 === 0)) regenNoise();
 
   ctx.save();
   ctx.translate(zoomT.x + shakeX, zoomT.y + shakeY);
@@ -1023,15 +1051,38 @@ function renderCanvas() {
     ctx.translate(cx, cy); ctx.rotate(mapAngle * Math.PI / 180); ctx.translate(-cx, -cy);
   }
 
+  // ---- Viewport culling bounds (in the same coords as d.cartX/d.cartY) ----
+  // Anything outside these bounds is off-screen and skipped entirely, which is
+  // what lets deep trees stay smooth when zoomed in.
+  const CULL_M = 220; // margin big enough to cover auras + labels
+  let cMinX, cMaxX, cMinY, cMaxY;
+  if (is3DOn) {
+    cMinX = (0 - zoomT.x) / k; cMaxX = (W - zoomT.x) / k;
+    cMinY = (0 - zoomT.y) / k; cMaxY = (H - zoomT.y) / k;
+  } else {
+    let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
+    const sp = isSpinOn, ang = sp ? -mapAngle * Math.PI / 180 : 0;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const cs = [[0,0],[W,0],[0,H],[W,H]];
+    for (let i = 0; i < 4; i++) {
+      let wx = (cs[i][0] - zoomT.x) / k, wy = (cs[i][1] - zoomT.y) / k;
+      if (sp) { const dx = wx - cx, dy = wy - cy; wx = cx + dx*ca - dy*sa; wy = cy + dx*sa + dy*ca; }
+      if (wx < mnx) mnx = wx; if (wx > mxx) mxx = wx; if (wy < mny) mny = wy; if (wy > mxy) mxy = wy;
+    }
+    cMinX = mnx; cMaxX = mxx; cMinY = mny; cMaxY = mxy;
+  }
+  cMinX -= CULL_M; cMaxX += CULL_M; cMinY -= CULL_M; cMaxY += CULL_M;
+
   // ---- POV ground: mirrored starfield reflection + fading floor ----
   if (is3DOn && povMode) {
     const horizonScreen = cy - focal3d * Math.tan(lookPitch);
     const hy = (horizonScreen - zoomT.y) / zoomT.k;
     nodes.forEach(d => {
       if (!d._vis3 || !isFinite(d.cartX) || !isFinite(d.cartY) || d.cartY >= hy) return;
-      const ry = 2 * hy - d.cartY, sc = d._persp || 1, r = nodeR(d) * sc;
+      if (d.cartX < cMinX || d.cartX > cMaxX) return;
+      const ry = 2 * hy - d.cartY, sc = d._persp || 1, r = d._r * sc;
       ctx.beginPath(); ctx.arc(d.cartX, ry, r, 0, Math.PI * 2);
-      ctx.fillStyle = colA(bcolor(d), 0.4 * (d._op3 || 0.5)); ctx.fill();
+      ctx.fillStyle = colA(d._col, 0.4 * (d._op3 || 0.5)); ctx.fill();
     });
     const span = (H * 2) / zoomT.k;
     const fg = ctx.createLinearGradient(0, hy, 0, hy + span);
@@ -1051,12 +1102,16 @@ function renderCanvas() {
   ctx.shadowColor = '#ffffff';
 
   links.forEach(link => {
-    if (is3DOn && (!link.source._vis3 || !link.target._vis3)) return;
-    let sx = link.source.cartX, sy = link.source.cartY;
-    let tx = link.target.cartX, ty = link.target.cartY;
-    const col = bcolor(link.target);
+    const s = link.source, t = link.target;
+    if (is3DOn && (!s._vis3 || !t._vis3)) return;
+    let sx = s.cartX, sy = s.cartY, tx = t.cartX, ty = t.cartY;
+    // cull links whose both endpoints are off-screen
+    const sIn = sx >= cMinX && sx <= cMaxX && sy >= cMinY && sy <= cMaxY;
+    const tIn = tx >= cMinX && tx <= cMaxX && ty >= cMinY && ty <= cMaxY;
+    if (!sIn && !tIn) return;
+    const col = t._col;
     ctx.strokeStyle = colA(col, linkAlpha);
-    ctx.lineWidth = (link.source.id === 'root' ? 4 : 2.5) + (isReactLinksOn ? smoothedEnergy * 12 : 0);
+    ctx.lineWidth = (s.id === 'root' ? 4 : 2.5) + (isReactLinksOn ? smoothedEnergy * 12 : 0);
     ctx.shadowColor = col;
     ctx.shadowBlur = (!is8Bit && isReactLinksOn) ? (10 + smoothedEnergy * 20) : 0;
 
@@ -1065,7 +1120,7 @@ function renderCanvas() {
       const angle = Math.atan2(dy, dx);
       ctx.beginPath(); ctx.moveTo(sx, sy);
       for (let i = 1; i < 24; i++) {
-        const pct = i / 24; const fpos = Math.floor((link.source.depth / Math.max(1, maxDepth)) * specSmooth.length * 0.45) + pct * 6;
+        const pct = i / 24; const fpos = Math.floor((s.depth / Math.max(1, maxDepth)) * specSmooth.length * 0.45) + pct * 6;
         const b = Math.min(specSmooth.length - 1, Math.floor(fpos));
         const off = (5 + specSmooth[b] * 180) * Math.sin(pct * Math.PI) * (0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - globalTime * 0.004 * spectrumSpeed));
         ctx.lineTo(sx + dx * pct - Math.sin(angle) * off, sy + dy * pct + Math.cos(angle) * off);
@@ -1081,12 +1136,19 @@ function renderCanvas() {
   });
   ctx.shadowBlur = 0;
 
-  let drawNodes = nodes;
-  if (is3DOn) drawNodes = nodes.slice().sort((a, b) => (a._z3 || 0) - (b._z3 || 0));
+  let drawNodes;
+  if (is3DOn) {
+    if (!_sorted || _sorted.length !== nodes.length) _sorted = nodes.slice();
+    if ((_frame & 3) === 0) _sorted.sort((a, b) => (a._z3 || 0) - (b._z3 || 0)); // re-sort every 4th frame
+    drawNodes = _sorted;
+  } else drawNodes = nodes;
 
   drawNodes.forEach(d => {
     if (is3DOn && !d._vis3) return;
-    const c = bcolor(d);
+    // viewport cull — skip everything off-screen
+    if (d.cartX < cMinX || d.cartX > cMaxX || d.cartY < cMinY || d.cartY > cMaxY) return;
+
+    const c = d._col;
     const scale = is3DOn && d._persp ? d._persp : 1;
 
     // focus pulse (rank-panel click) — damped bounce
@@ -1097,30 +1159,28 @@ function renderCanvas() {
       else d._pulseStart = null;
     }
 
-    const baseR = nodeR(d) * scale;
+    const baseR = d._r * scale;
     const audioBump = (hasAudioData && depthFreqs[d.depth]) ? depthFreqs[d.depth] * 0.3 : 0;
     const finalRadius = baseR * (1 + audioBump) * pulse;
+    const screenR = finalRadius * k;               // on-screen size for LOD decisions
 
     const nodeAlpha = is3DOn ? (d._op3 != null ? d._op3 : 1) : 1;
 
-    // ---- aura halo ----
+    // ---- aura halo (skip when it would be sub-pixel) ----
     if (!is8Bit) {
       let ai = 0;
       if (glowMode === 'manual') ai = manualGlowVal;
       else if (hasAudioData) { const f = depthFreqs[d.depth] || 0; ai = f * f * manualGlowVal; }
-      let auraAlpha = glowMode === 'manual' ? Math.min(0.9, ai * 0.3) : Math.min(1, ai * 1.5);
-      auraAlpha *= nodeAlpha;
       const auraR = finalRadius * 4.5 * (1 + ai * 0.6);
-      drawAura(c, d.cartX, d.cartY, auraR, auraAlpha, glowMode === 'audio' ? glitchAmt : 0);
+      if (auraR * k > 2) {
+        let auraAlpha = glowMode === 'manual' ? Math.min(0.9, ai * 0.3) : Math.min(1, ai * 1.5);
+        auraAlpha *= nodeAlpha;
+        drawAura(c, d.cartX, d.cartY, auraR, auraAlpha, glowMode === 'audio' ? glitchAmt : 0);
+      }
     }
 
     ctx.globalAlpha = nodeAlpha;
-
-    // modest crisp bloom on the body itself
-    if (!is8Bit && (glowMode === 'manual' || hasAudioData)) {
-      ctx.shadowBlur = Math.min(22, glowMode === 'manual' ? manualGlowVal * 8 : (depthFreqs[d.depth] || 0) * 22);
-      ctx.shadowColor = c;
-    } else { ctx.shadowBlur = 0; }
+    ctx.shadowBlur = 0;   // glow comes from the aura, not per-node shadows (big perf win)
 
     // ---- node body ----
     if (d.id === 'root') {
@@ -1158,19 +1218,23 @@ function renderCanvas() {
 
     ctx.shadowBlur = 0;
 
-    // ---- labels with glow ----
-    ctx.textAlign = 'center';
-    if (!is8Bit && d.data.g1 > 0) { ctx.shadowColor = c; ctx.shadowBlur = 10 * scale; }
-    ctx.fillStyle = d.data.g1 > 0 ? c : 'rgba(255,255,255,0.8)';
-    ctx.font = `${d.data.g1 >= 5 ? 800 : 600} ${is8Bit ? 11 : (d.data.g1 >= 5 ? 13 : 11) * scale}px ${is8Bit ? 'monospace' : 'system-ui'}`;
-    ctx.fillText(d.data.name, d.cartX, d.cartY + finalRadius + (16 * scale));
-    ctx.shadowBlur = 0;
-
-    if (d.data.g1 >= 2 && !is8Bit) {
-      ctx.shadowColor = c; ctx.shadowBlur = 12 * scale;
-      ctx.fillStyle = '#ffffff'; ctx.font = `800 ${11 * scale}px monospace`;
-      ctx.fillText(d.data.g1 + 'G1', d.cartX, d.cartY - finalRadius - (6 * scale));
+    // ---- labels with glow (LOD: skip when too small to read) ----
+    const showLabel = is8Bit || screenR > 4;
+    const glowText  = !is8Bit && screenR > 9;   // only blur labels once they're big enough to notice
+    if (showLabel) {
+      ctx.textAlign = 'center';
+      if (glowText && d.data.g1 > 0) { ctx.shadowColor = c; ctx.shadowBlur = 10 * scale; }
+      ctx.fillStyle = d.data.g1 > 0 ? c : 'rgba(255,255,255,0.8)';
+      ctx.font = `${d.data.g1 >= 5 ? 800 : 600} ${is8Bit ? 11 : (d.data.g1 >= 5 ? 13 : 11) * scale}px ${is8Bit ? 'monospace' : 'system-ui'}`;
+      ctx.fillText(d.data.name, d.cartX, d.cartY + finalRadius + (16 * scale));
       ctx.shadowBlur = 0;
+
+      if (d.data.g1 >= 2 && !is8Bit) {
+        if (glowText) { ctx.shadowColor = c; ctx.shadowBlur = 12 * scale; }
+        ctx.fillStyle = '#ffffff'; ctx.font = `800 ${11 * scale}px monospace`;
+        ctx.fillText(d.data.g1 + 'G1', d.cartX, d.cartY - finalRadius - (6 * scale));
+        ctx.shadowBlur = 0;
+      }
     }
 
     if (d === hoveredNode && !is8Bit) {
@@ -1211,18 +1275,6 @@ function renderCanvas() {
     ctx.globalAlpha = 1.0;
   }
   ctx.restore();
-
-  // Audio-adaptive TV-static texture (Audio glow mode). Drawn in screen space,
-  // 'overlay' blend so it grains the glow and stays subtle on the dark backdrop.
-  if (glowMode === 'audio' && !is8Bit && glitchAmt > 0.01) {
-    regenNoise();
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = Math.min(0.75, 0.15 + glitchAmt * 0.85);
-    ctx.imageSmoothingEnabled = false;     // crisp static; restored by ctx.restore()
-    ctx.drawImage(noiseCv, 0, 0, W, H);
-    ctx.restore();
-  }
 }
 
 d3.timer(elapsed => {
@@ -1317,8 +1369,8 @@ d3.timer(elapsed => {
   }
 
   if (is3DOn && root) {
-    const nodes = root.descendants();
-    let maxR = 1; nodes.forEach(d => { if (d.y > maxR) maxR = d.y; });
+    const nodes = allNodes;
+    let maxR = 1; for (const d of nodes) { if (d.y > maxR) maxR = d.y; }
     if (povMode) {
       const ls = 0.035;
       if (keys['a'] || keys['arrowleft']) lookYaw -= ls; if (keys['d'] || keys['arrowright']) lookYaw += ls;
@@ -1331,11 +1383,11 @@ d3.timer(elapsed => {
       project3D(nodes, maxR);
     }
   } else if (isDiffSpinOn && !isFloatOn && root) {
-    root.descendants().forEach(d => {
-      if (d.data.ox != null) return;
+    for (const d of allNodes) {
+      if (d.data.ox != null) continue;
       const a = ringAz(d);
       d.cartX = cx + d.y * Math.cos(a - Math.PI / 2); d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
-    });
+    }
   }
 
   renderCanvas();
