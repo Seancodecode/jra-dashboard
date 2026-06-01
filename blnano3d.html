@@ -841,7 +841,7 @@ const _auraGrad = {}, _sphereGrad = {};
 // low-frequency, NOT per-pixel static. It's used two ways in Audio glow mode:
 // (1) to warp the aura outline (the feDisplacementMap analog), and
 // (2) as a gentle cloudy modulation clipped to the aura.
-const NOISE = 128;
+const NOISE = 160;
 const noiseCv = document.createElement('canvas');
 noiseCv.width = NOISE; noiseCv.height = NOISE;
 const noiseCtx = noiseCv.getContext('2d');
@@ -856,14 +856,17 @@ const noiseCtx = noiseCv.getContext('2d');
     const a = l.g[y0 * l.p + x0], b = l.g[y0 * l.p + x1], c = l.g[y1 * l.p + x0], d = l.g[y1 * l.p + x1];
     return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
   }
-  const oct = [lattice(8), lattice(16), lattice(32)], amp = [0.55, 0.3, 0.15];
+  // High-frequency octaves => fine grain (the feTurbulence baseFrequency≈0.9 look),
+  // weighted toward the finest octave so it reads as TEXTURE, not soft clouds.
+  const oct = [lattice(40), lattice(80), lattice(160)], amp = [0.3, 0.35, 0.35];
   const max = amp[0] + amp[1] + amp[2];
   const img = noiseCtx.createImageData(NOISE, NOISE), dd = img.data;
   for (let y = 0; y < NOISE; y++) for (let x = 0; x < NOISE; x++) {
     const u = x / NOISE, v = y / NOISE;
     let n = 0; for (let o = 0; o < 3; o++) n += smp(oct[o], u, v) * amp[o];
     n = n / max;
-    const val = (60 + n * 150) | 0;            // mid-grey biased so 'overlay' stays gentle
+    n = (n - 0.5) * 1.5 + 0.5;                  // boost contrast so the grain is punchy
+    const val = Math.max(0, Math.min(255, (n * 255) | 0));
     const i = (y * NOISE + x) * 4;
     dd[i] = dd[i + 1] = dd[i + 2] = val; dd[i + 3] = 255;
   }
@@ -933,16 +936,16 @@ function drawAura(c, x, y, auraR, alpha, glitch) {
   ctx.fillStyle = auraGrad(c);
   ctx.fill();
 
-  // gentle cloudy turbulence, clipped to the same warped halo
+  // fine grain texture, clipped to the same warped halo
   if (wob > 0) {
     ctx.clip();                                  // reuse current path as clip
     ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = Math.min(0.55, alpha) * Math.min(1, glitch);
-    ctx.imageSmoothingEnabled = true;            // smooth clouds, not pixel static
-    const drift = t * 0.02;
-    const win = NOISE * 0.55;
-    const sx = (drift % (NOISE - win)), sy = ((drift * 0.6) % (NOISE - win));
-    ctx.drawImage(noiseCv, sx, sy, win, win, -AURA_REF, -AURA_REF, AURA_REF * 2, AURA_REF * 2);
+    ctx.globalAlpha = Math.min(0.85, 0.35 + glitch * 0.55);
+    ctx.imageSmoothingEnabled = false;           // crisp grain (this is the texture)
+    const span = AURA_REF * 2.4;                 // slight upscale → fine, crisp grain
+    const ox2 = -AURA_REF * 1.2 + Math.sin(t * 0.0007) * AURA_REF * 0.18;  // slow drift
+    const oy2 = -AURA_REF * 1.2 + Math.cos(t * 0.0009) * AURA_REF * 0.18;
+    ctx.drawImage(noiseCv, ox2, oy2, span, span);
   }
   ctx.restore();
 }
