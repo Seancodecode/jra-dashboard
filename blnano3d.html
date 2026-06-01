@@ -386,6 +386,7 @@ let specSmooth    = null;
 // Beat detection → the center star shoots stars on each beat (BPM-synced).
 let bpmStarsOn    = true;
 let beatAvg       = 0;
+let bassPrev      = 0;
 let lastBeatT     = -1e9;
 let shootingStars = [];
 let starFx        = null;
@@ -431,7 +432,8 @@ async function handleFileAudio(file) {
   sourceNode.buffer = audioBuffer;
   
   analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 256; 
+  analyser.fftSize = 256;
+  analyser.smoothingTimeConstant = 0.6;
   dataArray = new Uint8Array(analyser.frequencyBinCount);
   
   gainNode = audioCtx.createGain();
@@ -467,7 +469,8 @@ async function captureTabAudio() {
     sourceNode = audioCtx.createMediaStreamSource(stream);
     
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256; 
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.6;
     dataArray = new Uint8Array(analyser.frequencyBinCount);
     
     sourceNode.connect(analyser);
@@ -646,11 +649,14 @@ d3.timer(elapsed => {
       const bassEnd = Math.max(4, Math.floor(dataArray.length * 0.12));
       let bsum = 0; for (let i = 0; i < bassEnd; i++) bsum += dataArray[i];
       const bass = (bsum / bassEnd) / 255;
-      beatAvg += (bass - beatAvg) * 0.08;            // slow moving baseline
-      if (bass > beatAvg * 1.35 && bass > 0.10 && (elapsed - lastBeatT) > 250) {
+      // SLOW baseline ≈ the song's average bass; beats are spikes above it.
+      beatAvg += (bass - beatAvg) * 0.012;
+      const rising = bass > bassPrev;                 // only fire on the onset edge
+      if (rising && bass > beatAvg * 1.28 && bass > 0.07 && (elapsed - lastBeatT) > 200) {
         lastBeatT = elapsed;
-        spawnShootingStars(bass);
+        spawnShootingStars(Math.min(1, bass + (bass - beatAvg)));
       }
+      bassPrev = bass;
     }
 
     if (isShakeOn) {
@@ -1613,6 +1619,9 @@ function hideTip(){
   }, 250);
 }
 
+// Smooth curve through the spectrum sample points (passes through every point).
+const specLine = d3.line().curve(d3.curveCatmullRom.alpha(0.5));
+
 function linkPath(s, t) {
   if (is8Bit) {
     // Cheap chunky straight segment, snapped to a coarse pixel grid.
@@ -1628,9 +1637,9 @@ function linkPath(s, t) {
   let bow = len * 0.08;
 
   if (isSpectrumOn) {
-    // Trace the song's actual (smoothed) spectrum along the link: each ring shows
-    // a band of frequencies, so different songs read like different "voices".
-    const segments = 28;
+    // Trace the song's actual (smoothed) spectrum along the link as one smooth
+    // curve. Each ring reads a different frequency band → songs look distinct.
+    const segments = 24;
     const angle = Math.atan2(dy, dx);
     const phase = globalTime * 0.004 * spectrumSpeed;
     const fLen  = (specSmooth && specSmooth.length) ? specSmooth.length : 64;
@@ -1638,39 +1647,29 @@ function linkPath(s, t) {
     const startBin  = Math.floor((s.depth / safeDepth) * fLen * 0.45);
     const winBins   = Math.max(6, Math.floor(fLen * 0.22));
 
-    let path = `M${s.cartX},${s.cartY}`;
-    let prevX = s.cartX, prevY = s.cartY;
-
-    for (let i = 1; i <= segments; i++) {
+    const pts = [[s.cartX, s.cartY]];
+    for (let i = 1; i < segments; i++) {
       const pct = i / segments;
       const baseX = s.cartX + dx * pct;
       const baseY = s.cartY + dy * pct;
 
-      // Spectrum amplitude sampled across the band (interpolated between bins).
-      let amp = 4;                                       // gentle idle shimmer
+      let amp = 5;                                       // gentle idle shimmer
       if (specSmooth) {
         const fpos = startBin + pct * winBins;
         const b0 = Math.min(fLen - 1, Math.floor(fpos));
         const b1 = Math.min(fLen - 1, b0 + 1);
         const fr = fpos - b0;
-        const val = specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr;
-        amp += val * 60;                                 // more energy
+        amp += (specSmooth[b0] * (1 - fr) + specSmooth[b1] * fr) * 72;  // energy
       }
 
       const taper = Math.sin(pct * Math.PI);             // anchored at both ends
-      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 2 - phase); // travelling shimmer
+      const flow  = 0.6 + 0.4 * Math.sin(pct * Math.PI * 2 - phase);    // travelling shimmer
       const off   = amp * taper * flow;
 
-      let px = baseX - Math.sin(angle) * off;
-      let py = baseY + Math.cos(angle) * off;
-
-      // Smooth the polyline with a quadratic through the midpoint of each step.
-      const mxs = (prevX + px) / 2, mys = (prevY + py) / 2;
-      path += ` Q${prevX},${prevY} ${mxs},${mys}`;
-      prevX = px; prevY = py;
+      pts.push([baseX - Math.sin(angle) * off, baseY + Math.cos(angle) * off]);
     }
-    path += ` L${t.cartX},${t.cartY}`;
-    return path;
+    pts.push([t.cartX, t.cartY]);
+    return specLine(pts);
   }
 
   if (isWobbleOn) {
