@@ -831,6 +831,23 @@ function darkerStr(cc, k) { const d = cc.darker(k); return d + ''; }
 // every node of the same colour by translate()+scale()-ing the context.
 const AURA_REF = 100, SPHERE_REF = 50;
 const _auraGrad = {}, _sphereGrad = {};
+
+// Offscreen TV-static noise tile, regenerated per frame in Audio glow mode.
+// Composited over the scene with an 'overlay' blend so it textures the bright
+// glow / auras / ripples while leaving the near-black background untouched —
+// the canvas stand-in for the SVG feTurbulence + feDisplacementMap filter.
+const noiseCv = document.createElement('canvas');
+noiseCv.width = 220; noiseCv.height = 130;
+const noiseCtx = noiseCv.getContext('2d');
+const _noiseImg = noiseCtx.createImageData(noiseCv.width, noiseCv.height);
+function regenNoise() {
+  const d = _noiseImg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = (Math.random() * 255) | 0;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  noiseCtx.putImageData(_noiseImg, 0, 0);
+}
 function auraGrad(c) {
   if (_auraGrad[c]) return _auraGrad[c];
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, AURA_REF);
@@ -1194,6 +1211,18 @@ function renderCanvas() {
     ctx.globalAlpha = 1.0;
   }
   ctx.restore();
+
+  // Audio-adaptive TV-static texture (Audio glow mode). Drawn in screen space,
+  // 'overlay' blend so it grains the glow and stays subtle on the dark backdrop.
+  if (glowMode === 'audio' && !is8Bit && glitchAmt > 0.01) {
+    regenNoise();
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = Math.min(0.75, 0.15 + glitchAmt * 0.85);
+    ctx.imageSmoothingEnabled = false;     // crisp static; restored by ctx.restore()
+    ctx.drawImage(noiseCv, 0, 0, W, H);
+    ctx.restore();
+  }
 }
 
 d3.timer(elapsed => {
