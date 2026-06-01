@@ -211,6 +211,12 @@
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">Cam Shake</span>
       <button class="btn" id="shakeBtn" onclick="toggleShake()" style="padding:2px 6px;font-size:8px;color:#cc00ff;border-color:#cc00ff;">ON</button>
     </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Shake Sensitivity</span>
+      <span class="ctrl-val" id="shakeSensVal" style="color:#cc00ff;">0.5x</span>
+    </div>
+    <input type="range" id="shakeSensSlider" min="0.05" max="2" step="0.05" value="0.5"
+           oninput="setShakeSens(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#cc00ff;">
 
     <div class="ctrl-row">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">Ring Spin</span>
@@ -231,6 +237,17 @@
     <div class="ctrl-row">
       <span class="ctrl-label" style="text-transform:none;font-size:10px;">BPM Stars</span>
       <button class="btn" id="bpmStarsBtn" onclick="toggleBpmStars()" style="padding:2px 6px;font-size:8px;color:#fff7d6;border-color:#fff7d6;">ON</button>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Star Speed</span>
+      <span class="ctrl-val" id="starSpeedVal" style="color:#fff7d6;">1.5x</span>
+    </div>
+    <input type="range" id="starSpeedSlider" min="0.3" max="5" step="0.1" value="1.5"
+           oninput="setStarSpeed(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#fff7d6;">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">Center Rings</span>
+      <button class="btn" id="ringsBtn" onclick="toggleCenterRings()" style="padding:2px 6px;font-size:8px;color:#ffffff;border-color:#ffffff;">ON</button>
     </div>
 
     <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
@@ -345,6 +362,7 @@ let isShakeOn     = true;
 let shakeEnergy   = 0;
 let shakeX        = 0, shakeY = 0, shakeR = 0;
 const SHAKE_MAX   = 20;
+let shakeSens     = 0.5;
 
 let isDiffSpinOn  = false;
 let diffSpinSpeed = 1;
@@ -367,6 +385,13 @@ let bassPrev      = 0;
 let lastBeatT     = -1e9;
 let shootingStars = [];
 let starFx        = null;
+let starSpeedMul  = 1.5;
+
+let centerRingsOn = true;
+let centerRings   = [];
+let ringEnvPrev   = 0;
+let ringCooldown  = 0;
+let ringFx        = null;
 
 let audioCtx = null;
 let analyser = null;
@@ -644,39 +669,50 @@ d3.timer(elapsed => {
     }
 
     if (bpmStarsOn) {
-      const hiStart = Math.floor(dataArray.length * 0.2);
-      const hiEnd = Math.floor(dataArray.length * 0.6);
-      let hsum = 0;
-      for (let i = hiStart; i < hiEnd; i++) hsum += dataArray[i];
-      const highFreq = (hsum / (hiEnd - hiStart)) / 255;
+      // Drive the stars from the SAME energy signal that animates the
+      // nodes and reactive strings (smoothedEnergy) so they pulse in sync.
+      const react = smoothedEnergy;
 
-      if (highFreq > 0.55) { 
+      if (react > 0.22) {
         let activeCount = shootingStars.filter(s => s.held).length;
-        if (activeCount < 4) { 
-          spawnShootingStars(highFreq, true);
+        if (activeCount < 4) {
+          spawnShootingStars(react, true);
         }
-        
+
         shootingStars.forEach(s => {
           if (s.held) {
-            s.len = Math.min(800, s.len + 12); 
-            s.r += s.speed * 0.3; 
-            s.op = 1.5; 
+            s.len = Math.min(800, s.len + 12 * starSpeedMul);
+            s.r += s.speed * 0.3 * starSpeedMul;
+            s.op = 1.5;
           }
         });
       } else {
         shootingStars.forEach(s => {
           if (s.held) {
             s.held = false;
-            s.speed += 5; 
+            s.speed += 5;
           }
         });
       }
     }
 
+    // Center rings: fire whenever the center reacts to the music.
+    // Uses the same smoothedEnergy that drives the central node, with
+    // rising-edge (beat) detection so a ring launches on each surge.
+    if (centerRingsOn) {
+      if (ringCooldown > 0) ringCooldown--;
+      const e = smoothedEnergy;
+      if (e > 0.14 && e > ringEnvPrev * 1.15 && ringCooldown <= 0) {
+        spawnCenterRing(e);
+        ringCooldown = 6;
+      }
+      ringEnvPrev = e;
+    }
+
     if (isShakeOn) {
       const transient = Math.max(0, rawLevel - shakeEnergy);
       shakeEnergy += (rawLevel - shakeEnergy) * 0.35;
-      const amp = (shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6;
+      const amp = ((shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6) * shakeSens;
       
       const speed = 0.04;
       shakeX = Math.sin(globalTime * speed) * amp + Math.sin(globalTime * speed * 2.3) * (amp * 0.5);
@@ -730,6 +766,7 @@ d3.timer(elapsed => {
   }
 
   updateShootingStars();
+  updateCenterRings();
 
   const animateInner = hasAudioData;
   const innerSel = cachedInner || NG.selectAll('g.node-inner');
@@ -827,7 +864,7 @@ function updateShootingStars(){
     const s = shootingStars[i];
     
     if (!s.held) {
-      s.r += s.speed;
+      s.r += s.speed * starSpeedMul;
       s.op -= 0.015;
     }
     
@@ -847,6 +884,55 @@ function updateShootingStars(){
       .attr('stroke-width', d => 2 + 4 * d.op)
       .attr('stroke-opacity', d => Math.min(1, d.op))
       .style('filter', 'drop-shadow(0px 0px 8px #fff7d6)');
+  sel.exit().remove();
+}
+
+function spawnCenterRing(strength){
+  if (centerRings.length > 30) return;
+  centerRings.push({
+    id: Math.random().toString(36).slice(2),
+    r: 18,
+    op: 1,
+    w: 2 + strength * 5          // louder hit -> thicker ring
+  });
+}
+
+function updateCenterRings(){
+  if (!ringFx) return;
+
+  // Anchor at the centre of the map (the root node), matching the stars.
+  let ax = cx, ay = cy;
+  if (root && root.children !== undefined) {
+    if (isFinite(root.cartX)) ax = root.cartX;
+    if (isFinite(root.cartY)) ay = root.cartY;
+  }
+
+  const nearEdge = Math.min(W, H) * 0.5;        // ring starts leaving the view
+  const farEdge  = Math.hypot(W, H) * 0.55;     // fully out of bounds
+  const ringSpeed = farEdge / 80;               // ~80 frames to cross
+
+  for (let i = centerRings.length - 1; i >= 0; i--) {
+    const ring = centerRings[i];
+    ring.r += ringSpeed;
+    // Full opacity while expanding; fade only once it goes out of bounds.
+    if (ring.r > nearEdge) {
+      ring.op = Math.max(0, 1 - (ring.r - nearEdge) / (farEdge - nearEdge));
+    }
+    if (ring.op <= 0 || ring.r >= farEdge) centerRings.splice(i, 1);
+  }
+
+  const sel = ringFx.selectAll('circle.cring').data(centerRings, d => d.id);
+  sel.enter().append('circle')
+      .attr('class', 'cring')
+      .attr('fill', 'none')
+      .attr('stroke', '#ffffff')
+    .merge(sel)
+      .attr('cx', ax)
+      .attr('cy', ay)
+      .attr('r', d => d.r)
+      .attr('stroke-width', d => d.w * Math.max(0.35, d.op))
+      .attr('stroke-opacity', d => Math.min(1, d.op))
+      .style('filter', 'drop-shadow(0px 0px 6px rgba(255,255,255,0.85))');
   sel.exit().remove();
 }
 
@@ -1031,6 +1117,32 @@ function toggleBpmStars(){
     btn.style.borderColor = '';
     shootingStars = [];
     if (starFx) starFx.selectAll('line.shoot').remove();
+  }
+}
+
+function setStarSpeed(v){
+  starSpeedMul = parseFloat(v);
+  document.getElementById('starSpeedVal').textContent = starSpeedMul.toFixed(1) + 'x';
+}
+
+function setShakeSens(v){
+  shakeSens = parseFloat(v);
+  document.getElementById('shakeSensVal').textContent = shakeSens.toFixed(2) + 'x';
+}
+
+function toggleCenterRings(){
+  centerRingsOn = !centerRingsOn;
+  const btn = document.getElementById('ringsBtn');
+  if (centerRingsOn) {
+    btn.textContent = 'ON';
+    btn.style.color = '#ffffff';
+    btn.style.borderColor = '#ffffff';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    centerRings = [];
+    if (ringFx) ringFx.selectAll('circle.cring').remove();
   }
 }
 
@@ -1541,6 +1653,7 @@ staticFilter.append('feDisplacementMap')
 
 const LG = mapLayer.append('g');
 const NG = mapLayer.append('g');
+ringFx = g.append('g').attr('id', 'ringFx').style('pointer-events', 'none');
 starFx = g.append('g').attr('id', 'starFx').style('pointer-events', 'none');
 
 let tipTimeout;
