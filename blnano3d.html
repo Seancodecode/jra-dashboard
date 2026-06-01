@@ -117,10 +117,24 @@
     font-size:8px;color:rgba(255,255,255,0.2);font-family:monospace;
     letter-spacing:1px;text-transform:uppercase;flex-shrink:0;line-height:1.6;
   }
+
+  /* ── 8-bit / low-hardware mode ─────────────────────────────────────────── */
+  /* Crisp aliased edges (no anti-alias smoothing), no glow filters, pixel font */
+  body.eightbit svg, body.eightbit svg * { shape-rendering:crispEdges; }
+  body.eightbit .aura, body.eightbit .horse-photo, body.eightbit .photo-ring { display:none !important; }
+  body.eightbit svg text { font-family:'Courier New',monospace !important; text-shadow:none !important; letter-spacing:0; }
+  body.eightbit image { image-rendering:pixelated; }
+  /* scanline + vignette CRT overlay */
+  #crt{position:fixed;inset:0;pointer-events:none;z-index:5;display:none;}
+  body.eightbit #crt{display:block;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.0) 0px, rgba(0,0,0,0.0) 2px, rgba(0,0,0,0.45) 3px, rgba(0,0,0,0.0) 4px),
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%);}
 </style>
 </head>
 <body>
 <div id="cv"></div>
+<div id="crt"></div>
 <div id="welcome">Ready to fetch data.<br>Drag an MP3 or Listen to Tab to play audio.</div>
 
 <div id="dropZone"><div id="dropText">DROP BEATS HERE</div></div>
@@ -224,6 +238,11 @@
       <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;margin-bottom:4px;">
         PLAYS WITH AUDIO · OUTER RINGS FASTER
       </div>
+    </div>
+
+    <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
+      <span class="ctrl-label" style="text-transform:none;font-size:10px;">8-Bit Mode</span>
+      <button class="btn" id="eightBitBtn" onclick="toggle8Bit()" style="padding:2px 6px;font-size:8px;">OFF</button>
     </div>
 
     <div class="ctrl-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
@@ -346,6 +365,15 @@ let isDiffSpinOn  = false;
 let diffSpinSpeed = 1;
 let ringPhase     = 0;
 let audioLevel    = 0;       // smoothed overall loudness (0..1)
+
+// Performance: cached selections (refreshed each update) + 8-bit lite mode.
+let is8Bit        = false;
+let _frame        = 0;
+let cachedInner   = null;    // NG.selectAll('g.node-inner')
+let cachedNd      = null;    // NG.selectAll('g.nd')
+let rippleGroup   = null;    // root node's ripple <g>
+let linkSel       = null;    // LG.selectAll('path')
+let innerAnimated = false;   // whether node-inner scales are currently non-1
 
 let audioCtx = null;
 let analyser = null;
@@ -567,166 +595,132 @@ function getStarPath(cx, cy, spikes, outerRadius, innerRadius) {
 
 d3.timer(elapsed => {
   globalTime = elapsed;
-  
+  _frame++;
+  if (is8Bit && (_frame % 3 !== 0)) return;   // ~20fps target for old hardware
+
   if (isSpinOn) {
     mapAngle += spinSpeed * 0.2;
-    d3.select('#mapLayer').attr('transform', `rotate(${mapAngle}, ${cx}, ${cy})`);
+    mapLayer.attr('transform', `rotate(${mapAngle}, ${cx}, ${cy})`);
   }
-  
+
   let hasAudioData = false;
   if (isAudioPlaying && analyser) {
     analyser.getByteFrequencyData(dataArray);
     hasAudioData = true;
 
-    // Overall loudness, used by shake and differential ring spin.
+    // One pass over the low half of the spectrum, reused for level/shake/diff-spin.
     let lsum = 0, llim = Math.floor(dataArray.length * 0.5);
     for (let i = 0; i < llim; i++) lsum += dataArray[i];
-    audioLevel += (((lsum / llim) / 255) - audioLevel) * 0.3;
+    const rawLevel = (lsum / llim) / 255;
+    audioLevel += (rawLevel - audioLevel) * 0.3;
 
-    // Differential ring spin advances with the music (outer rings turn faster —
-    // applied per node via ringAz(), scaled by depth).
     if (isDiffSpinOn) ringPhase += diffSpinSpeed * 0.004 * (0.25 + audioLevel * 1.6);
 
-
-    // ── Camera shake energy (independent of glow mode) ──────────────────────
     if (isShakeOn) {
-      let ssum = 0, slim = Math.floor(dataArray.length * 0.5);
-      for (let i = 0; i < slim; i++) ssum += dataArray[i];
-      let inst = (ssum / slim) / 255;
-      let transient = Math.max(0, inst - shakeEnergy);   // sudden loudness jumps
-      shakeEnergy += (inst - shakeEnergy) * 0.35;
-      let amp = (shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6;
+      const transient = Math.max(0, rawLevel - shakeEnergy);
+      shakeEnergy += (rawLevel - shakeEnergy) * 0.35;
+      const amp = (shakeEnergy * shakeEnergy) * SHAKE_MAX + transient * SHAKE_MAX * 1.6;
       shakeX = (Math.random() * 2 - 1) * amp;
       shakeY = (Math.random() * 2 - 1) * amp;
       shakeR = (Math.random() * 2 - 1) * amp * 0.12;
     } else {
       shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8;
     }
-    // ────────────────────────────────────────────────────────────────────────
 
-    if (glowMode === 'audio') {
-      let sum = 0;
-      let limit = Math.floor(dataArray.length * 0.4);
-      for(let i = 0; i < limit; i++) sum += dataArray[i];
-      let currentEnergy = Math.min(1, ((sum / limit) / 255));
-      smoothedEnergy += (currentEnergy - smoothedEnergy) * 0.3;
-      
-      LG.selectAll('path').attr('stroke-opacity', 0.1 + (smoothedEnergy * 0.8));
-
+    if (glowMode === 'audio' && !is8Bit) {   // 8-bit skips costly filters/glow
+      smoothedEnergy += (Math.min(1, rawLevel) - smoothedEnergy) * 0.3;
+      (linkSel || LG.selectAll('path')).attr('stroke-opacity', 0.1 + smoothedEnergy * 0.8);
       d3.select('#noiseGen').attr('seed', Math.floor(elapsed / 50));
-      let glitchIntensity = smoothedEnergy * 100 * manualGlowVal;
-      d3.select('#glitchDisplacement').attr('scale', glitchIntensity);
-
+      d3.select('#glitchDisplacement').attr('scale', smoothedEnergy * 100 * manualGlowVal);
       if (smoothedEnergy > 0.05 && Math.random() < smoothedEnergy * 0.4) {
-        ripples.push({
-           id: Math.random().toString(),
-           r: 34,
-           op: Math.min(1, smoothedEnergy * 1.5),
-           thickness: 2 + smoothedEnergy * 5
-        });
+        ripples.push({ id: Math.random().toString(), r: 34,
+          op: Math.min(1, smoothedEnergy * 1.5), thickness: 2 + smoothedEnergy * 5 });
       }
     }
   } else {
-    if (glowMode === 'audio') {
-        smoothedEnergy = 0;
-        d3.select('#glitchDisplacement').attr('scale', 0);
-    }
-    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8;
-    audioLevel *= 0.9;
+    if (glowMode === 'audio') { smoothedEnergy = 0; d3.select('#glitchDisplacement').attr('scale', 0); }
+    shakeEnergy *= 0.85; shakeX *= 0.8; shakeY *= 0.8; shakeR *= 0.8; audioLevel *= 0.9;
   }
 
   for (let i = ripples.length - 1; i >= 0; i--) {
       ripples[i].r += 1 + smoothedEnergy * 3;
-      ripples[i].op -= 0.01; 
-      if (ripples[i].op <= 0) {
-          ripples.splice(i, 1);
-      }
+      ripples[i].op -= 0.01;
+      if (ripples[i].op <= 0) ripples.splice(i, 1);
   }
-
-  let rootNd = NG.selectAll('g.nd').filter(d => d.id === 'root');
-  if (!rootNd.empty()) {
-      let rpl = rootNd.select('.ripple-group').selectAll('circle.ripple').data(ripples, d => d.id);
-      
+  if (rippleGroup && !rippleGroup.empty()) {
+      const rpl = rippleGroup.selectAll('circle.ripple').data(ripples, d => d.id);
       rpl.enter().append('circle')
-         .attr('class', 'ripple')
-         .attr('fill', 'none')
-         .attr('stroke', '#ffd700')
+         .attr('class', 'ripple').attr('fill', 'none').attr('stroke', '#ffd700')
          .merge(rpl)
          .attr('r', d => d.r)
          .attr('stroke-width', d => d.thickness * d.op)
          .attr('stroke-opacity', d => d.op)
-         .attr('filter', glowMode === 'audio' ? 'url(#tvStatic)' : null);
-         
+         .attr('filter', (glowMode === 'audio' && !is8Bit) ? 'url(#tvStatic)' : null);
       rpl.exit().remove();
   }
 
-  NG.selectAll('g.node-inner').each(function(d) {
-    let el = d3.select(this);
-    let scale = 1;
-    let audioScale = 0;
+  // Per-node pulsing only when something actually animates it; otherwise skip the
+  // whole pass (and reset scales to 1 once when it goes idle). Native DOM writes +
+  // cached child refs avoid per-frame d3 sub-selections.
+  const animateInner = hasAudioData || isWaveOn;
+  const innerSel = cachedInner || NG.selectAll('g.node-inner');
+  if (animateInner) {
+    innerSel.each(function(d) {
+      let audioScale = 0;
+      if (hasAudioData) {
+        const safeDepth = Math.max(1, maxDepth);
+        let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
+        if (binIndex > dataArray.length - 1) binIndex = dataArray.length - 1;
+        const normFreq = (dataArray[binIndex] || 0) / 255;
 
-    if (hasAudioData) {
-      let safeDepth = Math.max(1, maxDepth);
-      let binIndex = Math.floor((d.depth / safeDepth) * (dataArray.length * 0.6));
-      binIndex = Math.min(binIndex, dataArray.length - 1);
-      
-      let normFreq = (dataArray[binIndex] || 0) / 255;
-      
-      if (glowMode === 'audio') {
-        let energy = Math.pow(normFreq, 2); 
-        let cappedEnergy = energy * manualGlowVal; 
-        
-        el.select('.aura')
-          .attr('opacity', Math.min(1, cappedEnergy * 1.5))
-          .attr('transform', `scale(${1 + (cappedEnergy * 1.5)})`);
-
-        let base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.15);
-        el.select('.main-node')
-          .attr('fill-opacity', Math.min(1, base + cappedEnergy * 0.4));
+        if (glowMode === 'audio' && !is8Bit) {
+          const capped = (normFreq * normFreq) * manualGlowVal;
+          let a = d._auraEl; if (a === undefined) a = d._auraEl = this.querySelector('.aura');
+          if (a) { a.setAttribute('opacity', Math.min(1, capped * 1.5)); a.setAttribute('transform', `scale(${1 + capped * 1.5})`); }
+          let m = d._mainEl; if (m === undefined) m = d._mainEl = this.querySelector('.main-node');
+          if (m) { const base = d.id === 'root' ? 0.8 : (d.data.g1 > 0 ? 0.6 : 0.15); m.setAttribute('fill-opacity', Math.min(1, base + capped * 0.4)); }
+        }
+        audioScale = normFreq * 0.8;
       }
-      
-      audioScale = normFreq * 0.8;
-    }
-
-    if (isWaveOn) {
-      const phase = d.depth * 1.5;
-      scale = 1 + (audioScale * 0.3) + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - phase);
-    } else {
-      scale = 1 + (audioScale * 0.3);
-    }
-    
-    el.attr('transform', `scale(${scale})`);
-  });
-
-  if (isSpectrumOn || (isWobbleOn && !isFloatOn)) {
-    redrawLinksFast();
-  }
-
-  // Differential ring spin in flat 2D: reposition each node by its ring offset.
-  if (isDiffSpinOn && !is3DOn && !isFloatOn && root) {
-    root.descendants().forEach(d => {
-      if (d.data.ox != null) return;            // respect manually dragged nodes
-      const a = ringAz(d);
-      d.cartX = cx + d.y * Math.cos(a - Math.PI / 2);
-      d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
+      const scale = isWaveOn
+        ? 1 + audioScale * 0.3 + 0.15 * Math.sin(elapsed * 0.002 * waveSpeed - d.depth * 1.5)
+        : 1 + audioScale * 0.3;
+      this.setAttribute('transform', `scale(${scale})`);
     });
-    NG.selectAll('g.nd').attr('transform', d => `translate(${d.cartX},${d.cartY})`);
-    redrawLinksFast();
+    innerAnimated = true;
+  } else if (innerAnimated) {
+    innerSel.attr('transform', 'scale(1)');
+    innerAnimated = false;
   }
 
+  // Positions + a single link redraw per frame.
   if (is3DOn) {
     if (povMode) {
       const ls = 0.035;
       if (keys['a'] || keys['arrowleft'])  lookYaw   -= ls;
       if (keys['d'] || keys['arrowright']) lookYaw   += ls;
-      if (keys['w'] || keys['arrowup'])    lookPitch -= ls;   // look up
-      if (keys['s'] || keys['arrowdown'])  lookPitch += ls;   // look down
+      if (keys['w'] || keys['arrowup'])    lookPitch -= ls;
+      if (keys['s'] || keys['arrowdown'])  lookPitch += ls;
       lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch));
-      povSpin += spin3dSpeed * 0.01;     // the tree wheels around you
+      povSpin += spin3dSpeed * 0.01;
     } else if (!orbit3d) {
       yaw3d += spin3dSpeed * 0.01;
     }
-    project3D();
+    project3D();                       // transforms + (throttled) sort + links + ground
+  } else {
+    let needLinks = false;
+    if (isDiffSpinOn && !isFloatOn && root) {
+      root.descendants().forEach(d => {
+        if (d.data.ox != null) return;
+        const a = ringAz(d);
+        d.cartX = cx + d.y * Math.cos(a - Math.PI / 2);
+        d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
+      });
+      (cachedNd || NG.selectAll('g.nd')).attr('transform', d => `translate(${d.cartX},${d.cartY})`);
+      needLinks = true;
+    }
+    if (isSpectrumOn || (isWobbleOn && !isFloatOn)) needLinks = true;
+    if (needLinks) redrawLinksFast();
   }
 
   applyCameraTransform();
@@ -926,6 +920,31 @@ function setBulge3D(v){
   document.getElementById('bulge3dVal').textContent = Math.round(bulge3d);
 }
 
+function toggle8Bit(){
+  is8Bit = !is8Bit;
+  const btn = document.getElementById('eightBitBtn');
+  document.body.classList.toggle('eightbit', is8Bit);
+  if (is8Bit) {
+    btn.textContent = 'ON';
+    btn.style.color = '#7CFC00';
+    btn.style.borderColor = '#7CFC00';
+    btn.style.boxShadow = '0 0 10px rgba(124,252,0,0.3)';
+    // Drop the expensive SVG turbulence/displacement filter currently on screen.
+    NG.selectAll('.aura').attr('filter', null);
+    NG.selectAll('.ripple').attr('filter', null);
+    d3.select('#glitchDisplacement').attr('scale', 0);
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    btn.style.boxShadow = 'none';
+  }
+  if (root) {
+    if (is3DOn) project3D();
+    else { redrawLinksFast(); update(root); }   // refresh link shapes (curved ↔ straight)
+  }
+}
+
 function setDiffSpin(v){
   diffSpinSpeed = parseFloat(v);
   document.getElementById('diffSpinVal').textContent = parseFloat(v).toFixed(1) + 'x';
@@ -1039,12 +1058,17 @@ function project3D(){
   nodes.forEach(d => { if (d.y > maxR) maxR = d.y; });
   if (povMode) projectPOV(nodes, maxR);
   else         projectOrbit(nodes, maxR);
+  redrawLinksFast();
 }
+
+// Depth sorting reorders the DOM, which is expensive; only do it every few frames.
+function shouldSort3D(){ return (_frame & 3) === 0; }
 
 // External orbit camera: tilted, spinning disc with a center bulge.
 function projectOrbit(nodes, maxR){
   const cyaw = Math.cos(yaw3d),  syaw = Math.sin(yaw3d);
   const cpit = Math.cos(pitch3d), spit = Math.sin(pitch3d);
+  const snap = is8Bit;
 
   let zmin = Infinity, zmax = -Infinity;
 
@@ -1066,8 +1090,10 @@ function projectOrbit(nodes, maxR){
     if (denom < 60) denom = 60;
     const persp = focal3d / denom;
 
-    d.cartX  = cx + x2 * persp;
-    d.cartY  = cy + y2 * persp;
+    let px = cx + x2 * persp, py = cy + y2 * persp;
+    if (snap) { px = Math.round(px / 4) * 4; py = Math.round(py / 4) * 4; }
+    d.cartX  = px;
+    d.cartY  = py;
     d._z3    = z2;
     d._persp = persp;
 
@@ -1077,12 +1103,10 @@ function projectOrbit(nodes, maxR){
 
   const zrange = (zmax - zmin) || 1;
 
-  NG.selectAll('g.nd')
+  const sel = (cachedNd || NG.selectAll('g.nd'))
     .attr('transform', d => `translate(${d.cartX},${d.cartY}) scale(${d._persp})`)
-    .attr('opacity',   d => 0.35 + 0.65 * ((d._z3 - zmin) / zrange))
-    .sort((a, b) => a._z3 - b._z3);
-
-  redrawLinksFast();
+    .attr('opacity',   d => 0.35 + 0.65 * ((d._z3 - zmin) / zrange));
+  if (shouldSort3D()) sel.sort((a, b) => a._z3 - b._z3);
 }
 
 // First-person POV: you are SMALL, standing on the central star, which spreads
@@ -1093,6 +1117,7 @@ function projectPOV(nodes, maxR){
   const focal = 820;
   const near  = 35;
   const camY  = 26 + bulge3d * 0.45;     // you stand low → world feels huge; Bulge lifts you
+  const snap  = is8Bit;
 
   const cyaw = Math.cos(lookYaw),   syaw = Math.sin(lookYaw);
   const cpit = Math.cos(lookPitch), spit = Math.sin(lookPitch);
@@ -1123,8 +1148,10 @@ function projectPOV(nodes, maxR){
 
     if (z2 > near) {
       const persp = focal / z2;
-      d.cartX  = cx + x2 * persp;
-      d.cartY  = cy - y2 * persp;                // world up → screen up
+      let px = cx + x2 * persp, py = cy - y2 * persp;
+      if (snap) { px = Math.round(px / 4) * 4; py = Math.round(py / 4) * 4; }
+      d.cartX  = px;
+      d.cartY  = py;
       d._z3    = z2;
       d._persp = Math.min(7, persp);             // let the nearest rings loom large
       d._vis3  = true;
@@ -1135,12 +1162,11 @@ function projectPOV(nodes, maxR){
     }
   });
 
-  NG.selectAll('g.nd')
+  const sel = (cachedNd || NG.selectAll('g.nd'))
     .attr('transform', d => d._vis3 ? `translate(${d.cartX},${d.cartY}) scale(${d._persp})` : 'scale(0)')
-    .attr('opacity',   d => d._vis3 ? Math.min(1, 0.45 + d._persp * 0.3) : 0)
-    .sort((a, b) => a._z3 - b._z3);              // far first, near drawn on top
+    .attr('opacity',   d => d._vis3 ? Math.min(1, 0.45 + d._persp * 0.3) : 0);
+  if (shouldSort3D()) sel.sort((a, b) => a._z3 - b._z3);
 
-  redrawLinksFast();
   drawPovGround();
 }
 
@@ -1496,6 +1522,12 @@ function hideTip(){
 }
 
 function linkPath(s, t) {
+  if (is8Bit) {
+    // Cheap chunky straight segment, snapped to a coarse pixel grid.
+    const sx = Math.round(s.cartX / 4) * 4, sy = Math.round(s.cartY / 4) * 4;
+    const tx = Math.round(t.cartX / 4) * 4, ty = Math.round(t.cartY / 4) * 4;
+    return `M${sx},${sy}L${tx},${ty}`;
+  }
   const mx  = (s.cartX + t.cartX) / 2;
   const my  = (s.cartY + t.cartY) / 2;
   const dx  = t.cartX - s.cartX;
@@ -1551,7 +1583,7 @@ function linkPath(s, t) {
 }
 
 function redrawLinksFast() {
-  LG.selectAll('path').attr('d', d => linkPath(d.source, d.target));
+  (linkSel || LG.selectAll('path')).attr('d', d => linkPath(d.source, d.target));
 }
 
 let isDragging = false;
@@ -1792,6 +1824,13 @@ function update(source) {
     }).remove();
 
   nodes.forEach(d => { d.cartX0 = d.cartX; d.cartY0 = d.cartY; });
+
+  // Cache selections so the per-frame loop doesn't re-query the DOM every tick.
+  cachedInner = NG.selectAll('g.node-inner');
+  cachedNd    = NG.selectAll('g.nd');
+  linkSel     = LG.selectAll('path');
+  rippleGroup = cachedNd.filter(d => d.id === 'root').select('.ripple-group');
+  cachedInner.each(function(d){ d._auraEl = undefined; d._mainEl = undefined; }); // refs may be stale
 
   if (glowMode === 'manual') applyStaticGlow(manualGlowVal);
 
