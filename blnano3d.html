@@ -472,11 +472,18 @@ let isAudioPlaying = false;
 const canvas = d3.select('#cv').append('canvas').attr('width', W).attr('height', H);
 const ctx = canvas.node().getContext('2d');
 
-// The off-screen buffer to save us from SVG filter lag
-const auraCanvas = document.createElement('canvas');
-auraCanvas.width = W;
-auraCanvas.height = H;
-const auraCtx = auraCanvas.getContext('2d');
+// --- Sprite Caching Setup ---
+const AURA_CACHE_SIZE = 240; // Pad it out so the glitch filter doesn't clip the edges
+const auraSprites = {};
+const palette = ['#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500','#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222', '#ffd700'];
+
+palette.forEach(c => {
+  const cvs = document.createElement('canvas');
+  cvs.width = AURA_CACHE_SIZE;
+  cvs.height = AURA_CACHE_SIZE;
+  auraSprites[c] = cvs;
+});
+// ----------------------------
 
 let zoomT = d3.zoomIdentity;
 
@@ -935,20 +942,25 @@ function fillSphere(c, x, y, r) {
   ctx.restore();
 }
 
-function drawAura(c, x, y, auraR, alpha) {
-  if (alpha <= 0.01 || auraR <= 0) return;
-  auraCtx.save();
-  auraCtx.globalAlpha = Math.min(1, alpha);
-  auraCtx.translate(x, y);
-  const s = auraR / AURA_REF; 
-  auraCtx.scale(s, s);
-
-  auraCtx.fillStyle = auraGrad(c);
-  auraCtx.beginPath(); 
-  auraCtx.arc(0, 0, AURA_REF, 0, Math.PI * 2); 
-  auraCtx.fill();
-
-  auraCtx.restore();
+// --- The Cache Updater ---
+function updateAuraSprites(glitch) {
+  palette.forEach(c => {
+    const cvs = auraSprites[c];
+    const actx = cvs.getContext('2d');
+    actx.clearRect(0, 0, AURA_CACHE_SIZE, AURA_CACHE_SIZE);
+    
+    actx.save();
+    actx.translate(AURA_CACHE_SIZE / 2, AURA_CACHE_SIZE / 2);
+    
+    if (glitch > 0.02) actx.filter = 'url(#tvStatic)';
+    
+    actx.fillStyle = auraGrad(c);
+    actx.beginPath(); 
+    actx.arc(0, 0, AURA_REF, 0, Math.PI * 2); 
+    actx.fill();
+    
+    actx.restore();
+  });
 }
 
 function traceStar(x, y, spikes, outer, inner) {
@@ -1075,19 +1087,14 @@ function renderCanvas() {
   }
 
   ctx.clearRect(0, 0, W, H);
-  auraCtx.clearRect(0, 0, W, H);
 
   ctx.save();
-  auraCtx.save();
-
-  [ctx, auraCtx].forEach(c => {
-    c.translate(zoomT.x + shakeX, zoomT.y + shakeY);
-    c.scale(zoomT.k, zoomT.k);
-    if (shakeR) c.rotate(shakeR * Math.PI / 180);
-    if (isSpinOn && !is3DOn) {
-      c.translate(cx, cy); c.rotate(mapAngle * Math.PI / 180); c.translate(-cx, -cy);
-    }
-  });
+  ctx.translate(zoomT.x + shakeX, zoomT.y + shakeY);
+  ctx.scale(zoomT.k, zoomT.k);
+  if (shakeR) ctx.rotate(shakeR * Math.PI / 180);
+  if (isSpinOn && !is3DOn) {
+    ctx.translate(cx, cy); ctx.rotate(mapAngle * Math.PI / 180); ctx.translate(-cx, -cy);
+  }
 
   const CULL_M = 220; 
   let cMinX, cMaxX, cMinY, cMaxY;
@@ -1168,57 +1175,12 @@ function renderCanvas() {
   });
   ctx.shadowBlur = 0;
 
-  let drawNodes = is3DOn ? _sorted : nodes;
-
-  drawNodes.forEach(d => {
-    if (is3DOn && !d._vis3) return;
-    if (d.cartX < cMinX || d.cartX > cMaxX || d.cartY < cMinY || d.cartY > cMaxY) return;
-
-    const scale = is3DOn && d._persp ? d._persp : 1;
-    let pulse = 1;
-    if (d._pulseStart != null) {
-      const el = globalTime - d._pulseStart;
-      if (el < 1100) pulse = 1 + Math.exp(-el / 260) * Math.sin(el / 95) * 0.9;
-    }
-
-    const baseR = d._r * scale;
-    const audioBump = (hasAudioData && depthFreqs[d.depth]) ? depthFreqs[d.depth] * 0.3 : 0;
-    const finalRadius = baseR * (1 + audioBump) * pulse;
-
-    if (!is8Bit) {
-      let ai = 0;
-      if (glowMode === 'manual') ai = manualGlowVal;
-      else if (hasAudioData) { const f = depthFreqs[d.depth] || 0; ai = f * f * manualGlowVal; }
-      const auraR = finalRadius * 4.5 * (1 + ai * 0.6);
-      if (auraR * k > 2) {
-        const nodeAlpha = is3DOn ? (d._op3 != null ? d._op3 : 1) : 1;
-        let auraAlpha = glowMode === 'manual' ? Math.min(0.9, ai * 0.3) : Math.min(1, ai * 1.5);
-        drawAura(d._col, d.cartX, d.cartY, auraR, auraAlpha * nodeAlpha);
-      }
-    }
-  });
-
-  if (!is3DOn) {
-    let ax = root ? root.cartX : cx, ay = root ? root.cartY : cy;
-    ripples.forEach(rp => {
-      auraCtx.beginPath(); auraCtx.arc(ax, ay, rp.r, 0, Math.PI * 2);
-      auraCtx.strokeStyle = '#ffd700'; auraCtx.lineWidth = rp.w * Math.max(0.3, rp.op);
-      auraCtx.globalAlpha = Math.min(1, Math.max(0, rp.op));
-      auraCtx.stroke();
-    });
-    auraCtx.globalAlpha = 1.0;
-  }
-
-  auraCtx.restore(); 
-
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); 
-  if (glitchAmt > 0.02 && glowMode === 'audio' && !is8Bit) {
-    ctx.filter = 'url(#tvStatic)';
-  }
-  ctx.drawImage(auraCanvas, 0, 0);
-  ctx.filter = 'none';
-  ctx.restore();
+  let drawNodes;
+  if (is3DOn) {
+    if (!_sorted || _sorted.length !== nodes.length) _sorted = nodes.slice();
+    if ((_frame & 3) === 0) _sorted.sort((a, b) => (a._z3 || 0) - (b._z3 || 0)); 
+    drawNodes = _sorted;
+  } else drawNodes = nodes;
 
   drawNodes.forEach(d => {
     if (is3DOn && !d._vis3) return;
@@ -1226,6 +1188,7 @@ function renderCanvas() {
 
     const c = d._col;
     const scale = is3DOn && d._persp ? d._persp : 1;
+
     let pulse = 1;
     if (d._pulseStart != null) {
       const el = globalTime - d._pulseStart;
@@ -1237,8 +1200,31 @@ function renderCanvas() {
     const audioBump = (hasAudioData && depthFreqs[d.depth]) ? depthFreqs[d.depth] * 0.3 : 0;
     const finalRadius = baseR * (1 + audioBump) * pulse;
     const screenR = finalRadius * k;               
-
     const nodeAlpha = is3DOn ? (d._op3 != null ? d._op3 : 1) : 1;
+
+    if (!is8Bit) {
+      let ai = 0;
+      if (glowMode === 'manual') ai = manualGlowVal;
+      else if (hasAudioData) { const f = depthFreqs[d.depth] || 0; ai = f * f * manualGlowVal; }
+      
+      const auraR = finalRadius * 4.5 * (1 + ai * 0.6);
+      
+      if (auraR * k > 2) {
+        let auraAlpha = glowMode === 'manual' ? Math.min(0.9, ai * 0.3) : Math.min(1, ai * 1.5);
+        auraAlpha *= nodeAlpha;
+
+        if (auraSprites[c] && auraAlpha > 0.01) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, auraAlpha);
+          ctx.translate(d.cartX, d.cartY);
+          const s = auraR / AURA_REF; 
+          ctx.scale(s, s);
+          ctx.drawImage(auraSprites[c], -AURA_CACHE_SIZE / 2, -AURA_CACHE_SIZE / 2);
+          ctx.restore();
+        }
+      }
+    }
+
     ctx.globalAlpha = nodeAlpha;
     ctx.shadowBlur = 0;   
 
@@ -1305,6 +1291,22 @@ function renderCanvas() {
   if (!is3DOn) {
     let ax = root ? root.cartX : cx, ay = root ? root.cartY : cy;
     ctx.shadowBlur = 0;
+    
+    ripples.forEach(rp => {
+      ctx.beginPath(); ctx.arc(ax, ay, rp.r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffd700'; ctx.lineWidth = rp.w * Math.max(0.3, rp.op);
+      ctx.globalAlpha = Math.min(1, Math.max(0, rp.op));
+      if (!is8Bit) { 
+        ctx.shadowColor = '#ffd700'; 
+        ctx.shadowBlur = 8 * rp.op; 
+        if (glowMode === 'audio' && glitchAmt > 0.02) ctx.filter = 'url(#tvStatic)';
+      }
+      ctx.stroke(); 
+      ctx.shadowBlur = 0;
+      ctx.filter = 'none';
+    });
+    
+    ctx.globalAlpha = 1.0;
     shootingStars.forEach(s => {
       ctx.beginPath();
       ctx.moveTo(ax + Math.cos(s.ang) * Math.max(0, s.r - s.len), ay + Math.sin(s.ang) * Math.max(0, s.r - s.len));
@@ -1313,6 +1315,7 @@ function renderCanvas() {
       if (!is8Bit) { ctx.shadowColor = '#fff7d6'; ctx.shadowBlur = 8; }
       ctx.stroke(); ctx.shadowBlur = 0;
     });
+    
     ctx.globalAlpha = 1.0;
     centerRings.forEach(r => {
       ctx.beginPath(); ctx.arc(ax, ay, r.r, 0, Math.PI * 2);
@@ -1442,6 +1445,8 @@ d3.timer(elapsed => {
       d.cartX = cx + d.y * Math.cos(a - Math.PI / 2); d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
     }
   }
+
+  updateAuraSprites(glowMode === 'audio' && !is8Bit ? glitchAmt : 0);
 
   renderCanvas();
 });
