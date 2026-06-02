@@ -1154,14 +1154,22 @@ function renderCanvas() {
     ctx.shadowColor = col;
     ctx.shadowBlur = (!is8Bit && isReactLinksOn) ? (10 + smoothedEnergy * 20) : 0;
 
-    if (isSpectrumOn && specSmooth && !is3DOn && !is8Bit) {
+    if (isSpectrumOn && specSmooth && !is8Bit) {
       const dx = tx - sx, dy = ty - sy;
       const angle = Math.atan2(dy, dx);
+      
+      // Calculate depth scaling so far-away strings don't look like giant noodles
+      const pScale = is3DOn ? ((s._persp || 1) + (t._persp || 1)) / 2 : 1;
+
       ctx.beginPath(); ctx.moveTo(sx, sy);
       for (let i = 1; i < 24; i++) {
-        const pct = i / 24; const fpos = Math.floor((s.depth / Math.max(1, maxDepth)) * specSmooth.length * 0.45) + pct * 6;
+        const pct = i / 24; 
+        const fpos = Math.floor((s.depth / Math.max(1, maxDepth)) * specSmooth.length * 0.45) + pct * 6;
         const b = Math.min(specSmooth.length - 1, Math.floor(fpos));
-        const off = (5 + specSmooth[b] * 180) * Math.sin(pct * Math.PI) * (0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - globalTime * 0.004 * spectrumSpeed));
+        
+        // Apply the perspective scale to the amplitude offset
+        const off = (5 + specSmooth[b] * 180) * pScale * Math.sin(pct * Math.PI) * (0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - globalTime * 0.004 * spectrumSpeed));
+        
         ctx.lineTo(sx + dx * pct - Math.sin(angle) * off, sy + dy * pct + Math.cos(angle) * off);
       }
       ctx.lineTo(tx, ty); ctx.stroke();
