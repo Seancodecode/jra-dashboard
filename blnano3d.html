@@ -248,6 +248,17 @@
              oninput="setShakeSens(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#cc00ff;">
 
       <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Audio Wave</span>
+        <button class="btn" id="waveBtn" onclick="toggleWave()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      </div>
+      <div class="ctrl-row" id="waveSpeedRow" style="display:none;">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Wave Speed</span>
+        <span class="ctrl-val" id="waveSpeedVal">1.0x</span>
+      </div>
+      <input type="range" id="waveSpeedSlider" min="0.1" max="5" step="0.1" value="1"
+             oninput="setWaveSpeed(this.value)" style="opacity:0.8;margin-bottom:8px;display:none;accent-color:#00ffcc;">
+
+      <div class="ctrl-row">
         <span class="ctrl-label" style="text-transform:none;font-size:10px;">Ring Spin</span>
         <button class="btn" id="diffSpinBtn" onclick="toggleDiffSpin()" style="padding:2px 6px;font-size:8px;">OFF</button>
       </div>
@@ -381,7 +392,7 @@
 </div>
 
 <div id="tip"></div>
-<div class="hint">Click to expand/collapse · Drag node to reposition · Scroll to zoom</div>
+<div class="hint">Left Click/Drag to pan/orbit · Middle Click node to reposition · Scroll to zoom</div>
 
 <script>
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
@@ -444,6 +455,10 @@ let diffSpinSpeed = 1;
 let ringPhase     = 0;
 let audioLevel    = 0;
 
+let isWaveOn      = false;
+let waveSpeed     = 1.0;
+let wavePhase     = 0;
+
 let is8Bit        = false;
 let _frame        = 0;
 let specSmooth    = null;
@@ -472,8 +487,7 @@ let isAudioPlaying = false;
 const canvas = d3.select('#cv').append('canvas').attr('width', W).attr('height', H);
 const ctx = canvas.node().getContext('2d');
 
-// --- Sprite Caching Setup ---
-const AURA_CACHE_SIZE = 240; // Pad it out so the glitch filter doesn't clip the edges
+const AURA_CACHE_SIZE = 240; 
 const auraSprites = {};
 const palette = ['#ff0055','#00ffcc','#cc00ff','#0088ff','#ff5500','#ff00aa','#aa00ff','#00eeff','#00ff55','#ffbb00','#d4ff00','#ff2222', '#ffd700'];
 
@@ -483,7 +497,6 @@ palette.forEach(c => {
   cvs.height = AURA_CACHE_SIZE;
   auraSprites[c] = cvs;
 });
-// ----------------------------
 
 let zoomT = d3.zoomIdentity;
 
@@ -530,11 +543,12 @@ canvas.on('mousemove', (e) => {
 });
 
 canvas.on('mousedown', e => {
-  if (is3DOn) { orbit3d = true; lastPX = e.clientX; lastPY = e.clientY; }
+  if (is3DOn && e.button === 0) { orbit3d = true; lastPX = e.clientX; lastPY = e.clientY; }
 });
 window.addEventListener('mouseup', () => { orbit3d = false; });
 
 const drag = d3.drag()
+  .filter(e => e.button === 1 || e.touches)
   .subject((e) => {
     const x = (e.x - zoomT.x) / zoomT.k;
     const y = (e.y - zoomT.y) / zoomT.k;
@@ -744,6 +758,25 @@ function toggleFloat() {
   }
 }
 
+function toggleWave() {
+  isWaveOn = !isWaveOn;
+  const btn = document.getElementById('waveBtn');
+  const row = document.getElementById('waveSpeedRow');
+  const slider = document.getElementById('waveSpeedSlider');
+  if (isWaveOn) {
+    btn.textContent = 'ON'; btn.style.color = '#00ffcc'; btn.style.borderColor = '#00ffcc';
+    row.style.display = 'flex'; slider.style.display = 'block';
+  } else {
+    btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = '';
+    row.style.display = 'none'; slider.style.display = 'none';
+    if (root && !is3DOn && !isFloatOn && !isDiffSpinOn) update(root);
+  }
+}
+function setWaveSpeed(v) { 
+  waveSpeed = parseFloat(v); 
+  document.getElementById('waveSpeedVal').textContent = waveSpeed.toFixed(1) + 'x'; 
+}
+
 function setTilt(v) { pitch3d = parseFloat(v); document.getElementById('tiltVal').textContent = Math.round(pitch3d * 180 / Math.PI) + '\u00b0'; }
 function setSpin3D(v) { spin3dSpeed = parseFloat(v); document.getElementById('spin3dVal').textContent = parseFloat(v).toFixed(1) + 'x'; }
 function setBulge3D(v) { bulge3d = parseFloat(v); document.getElementById('bulge3dVal').textContent = Math.round(bulge3d); }
@@ -942,7 +975,6 @@ function fillSphere(c, x, y, r) {
   ctx.restore();
 }
 
-// --- The Cache Updater ---
 function updateAuraSprites(glitch) {
   palette.forEach(c => {
     const cvs = auraSprites[c];
@@ -1031,7 +1063,14 @@ function project3D(nodes, maxR) {
     const a = ringAz(d);
     const lx = d.y * Math.cos(a - Math.PI / 2);
     const ly = d.y * Math.sin(a - Math.PI / 2);
-    const lz = (1 - d.y / maxR) * bulge3d;
+    
+    let zOff = 0;
+    if (isWaveOn && hasAudioData) {
+      const energy = depthFreqs[d.depth] || smoothedEnergy;
+      zOff = Math.sin(d.x * 6 + wavePhase) * (energy * 80); 
+    }
+    const lz = (1 - d.y / maxR) * bulge3d + zOff;
+    
     const x1 = lx * cyaw + lz * syaw;
     const z1 = -lx * syaw + lz * cyaw;
     const y2 = ly * cpit - z1 * spit;
@@ -1056,6 +1095,12 @@ function projectPOV(nodes, maxR) {
     const az = ringAz(d) + povSpin;
     let dist = d.depth === 0 ? 130 : 240 + t * 2000;
     let elev = d.depth === 0 ? -0.6 : Math.pow(t, 0.85) * (Math.PI / 2) * 0.96;
+    
+    if (isWaveOn && hasAudioData) {
+      const energy = depthFreqs[d.depth] || smoothedEnergy;
+      elev += Math.sin(d.x * 6 + wavePhase) * (energy * 0.3);
+    }
+    
     const wx = dist * Math.cos(elev) * Math.cos(az);
     const wz = dist * Math.cos(elev) * Math.sin(az);
     const wy = dist * Math.sin(elev);
@@ -1158,7 +1203,6 @@ function renderCanvas() {
       const dx = tx - sx, dy = ty - sy;
       const angle = Math.atan2(dy, dx);
       
-      // Calculate depth scaling so far-away strings don't look like giant noodles
       const pScale = is3DOn ? ((s._persp || 1) + (t._persp || 1)) / 2 : 1;
 
       ctx.beginPath(); ctx.moveTo(sx, sy);
@@ -1166,10 +1210,7 @@ function renderCanvas() {
         const pct = i / 24; 
         const fpos = Math.floor((s.depth / Math.max(1, maxDepth)) * specSmooth.length * 0.45) + pct * 6;
         const b = Math.min(specSmooth.length - 1, Math.floor(fpos));
-        
-        // Apply the perspective scale to the amplitude offset
         const off = (5 + specSmooth[b] * 180) * pScale * Math.sin(pct * Math.PI) * (0.6 + 0.4 * Math.sin(pct * Math.PI * 4 - globalTime * 0.004 * spectrumSpeed));
-        
         ctx.lineTo(sx + dx * pct - Math.sin(angle) * off, sy + dy * pct + Math.cos(angle) * off);
       }
       ctx.lineTo(tx, ty); ctx.stroke();
@@ -1342,6 +1383,7 @@ d3.timer(elapsed => {
   if (is8Bit && (_frame % 3 !== 0)) return;
 
   if (isSpinOn && !is3DOn) mapAngle += spinSpeed * 0.2;
+  if (isWaveOn) wavePhase += waveSpeed * 0.05;
 
   hasAudioData = false;
   if (isAudioPlaying && analyser) {
@@ -1446,11 +1488,20 @@ d3.timer(elapsed => {
       if (!orbit3d) yaw3d += spin3dSpeed * 0.01;
       project3D(nodes, maxR);
     }
-  } else if (isDiffSpinOn && !isFloatOn && root) {
+  } else if ((isDiffSpinOn || isWaveOn) && !isFloatOn && root) {
     for (const d of allNodes) {
       if (d.data.ox != null) continue;
       const a = ringAz(d);
-      d.cartX = cx + d.y * Math.cos(a - Math.PI / 2); d.cartY = cy + d.y * Math.sin(a - Math.PI / 2);
+      
+      let wOff = 0;
+      if (isWaveOn && hasAudioData) {
+          const energy = depthFreqs[d.depth] || smoothedEnergy;
+          wOff = Math.sin(d.x * 6 + wavePhase) * (energy * 40); 
+      }
+      
+      const rad = d.y + wOff;
+      d.cartX = cx + rad * Math.cos(a - Math.PI / 2); 
+      d.cartY = cy + rad * Math.sin(a - Math.PI / 2);
     }
   }
 
