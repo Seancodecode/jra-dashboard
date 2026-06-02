@@ -547,21 +547,33 @@ canvas.on('mousedown', e => {
 });
 window.addEventListener('mouseup', () => { orbit3d = false; });
 
+let wasDragged = false;
+
 const drag = d3.drag()
-  .filter(e => e.button === 1 || e.touches)
+  .filter(e => e.button === 1 || e.touches) // Middle click or touch
   .subject((e) => {
     const x = (e.x - zoomT.x) / zoomT.k;
     const y = (e.y - zoomT.y) / zoomT.k;
-    return simulationTree ? simulationTree.find(x, y, 30) : null;
+    const node = simulationTree ? simulationTree.find(x, y, 30) : null;
+    
+    // Feed D3 a proxy object using the actual screen coordinates, 
+    // shielding our polar angles from getting nuked.
+    return node ? { x: node.cartX, y: node.cartY, node: node } : null;
   })
   .on('start', (e) => {
-    draggedNode = e.subject;
+    draggedNode = e.subject.node;
+    wasDragged = false; // Reset the drag tracker
     if (isFloatOn && floatSim) floatSim.alphaTarget(0.3).restart();
   })
   .on('drag', (e) => {
     if (draggedNode) {
-      draggedNode.cartX = e.x; draggedNode.cartY = e.y;
-      draggedNode.data.ox = e.x; draggedNode.data.oy = e.y;
+      wasDragged = true; // They actually moved the mouse, it's a real drag
+      
+      draggedNode.cartX = e.x; 
+      draggedNode.cartY = e.y;
+      draggedNode.data.ox = e.x; 
+      draggedNode.data.oy = e.y;
+      
       if (isFloatOn) { draggedNode.fx = e.x; draggedNode.fy = e.y; }
     }
   })
@@ -570,10 +582,13 @@ const drag = d3.drag()
       draggedNode.fx = null; draggedNode.fy = null;
       if (floatSim) floatSim.alphaTarget(0);
     }
-    if (draggedNode && !isFloatOn && !is3DOn) {
+    
+    // Only toggle the branch if they clicked without dragging
+    if (draggedNode && !isFloatOn && !is3DOn && !wasDragged) {
       if (draggedNode._children) {
         draggedNode.children = draggedNode.children ? null : draggedNode._children;
-        draggedNode.data.ox = null; draggedNode.data.oy = null;
+        draggedNode.data.ox = null; 
+        draggedNode.data.oy = null;
         update(draggedNode);
       }
     }
