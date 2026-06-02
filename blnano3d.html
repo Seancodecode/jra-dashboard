@@ -392,7 +392,7 @@
 </div>
 
 <div id="tip"></div>
-<div class="hint">Left Click/Drag to pan/orbit · Middle Click node to reposition · Scroll to zoom</div>
+<div class="hint">Left Click/Drag to pan/orbit · Middle Click node to reposition/expand · Scroll to zoom</div>
 
 <script>
 const supabaseUrl = 'https://fzceflayktxyjidvkfsh.supabase.co';
@@ -550,30 +550,25 @@ window.addEventListener('mouseup', () => { orbit3d = false; });
 let wasDragged = false;
 
 const drag = d3.drag()
-  .filter(e => e.button === 1 || e.touches) // Middle click or touch
+  .filter(e => e.button === 1 || e.touches)
   .subject((e) => {
     const x = (e.x - zoomT.x) / zoomT.k;
     const y = (e.y - zoomT.y) / zoomT.k;
     const node = simulationTree ? simulationTree.find(x, y, 30) : null;
-    
-    // Feed D3 a proxy object using the actual screen coordinates, 
-    // shielding our polar angles from getting nuked.
     return node ? { x: node.cartX, y: node.cartY, node: node } : null;
   })
   .on('start', (e) => {
     draggedNode = e.subject.node;
-    wasDragged = false; // Reset the drag tracker
+    wasDragged = false; 
     if (isFloatOn && floatSim) floatSim.alphaTarget(0.3).restart();
   })
   .on('drag', (e) => {
     if (draggedNode) {
-      wasDragged = true; // They actually moved the mouse, it's a real drag
-      
+      wasDragged = true; 
       draggedNode.cartX = e.x; 
       draggedNode.cartY = e.y;
       draggedNode.data.ox = e.x; 
       draggedNode.data.oy = e.y;
-      
       if (isFloatOn) { draggedNode.fx = e.x; draggedNode.fy = e.y; }
     }
   })
@@ -583,7 +578,6 @@ const drag = d3.drag()
       if (floatSim) floatSim.alphaTarget(0);
     }
     
-    // Only toggle the branch if they clicked without dragging
     if (draggedNode && !isFloatOn && !is3DOn && !wasDragged) {
       if (draggedNode._children) {
         draggedNode.children = draggedNode.children ? null : draggedNode._children;
@@ -1056,13 +1050,38 @@ function update(source) {
   tree(root);
   const nodes = root.descendants();
   nodes.forEach(d => {
-    d.y = RADII[Math.min(d.depth, RADII.length - 1)] * spreadFactor;
-    if (d.data.ox != null) { d.cartX = d.data.ox; d.cartY = d.data.oy; }
-    else { d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2); d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2); }
-    d.cartX0 = d.cartX; d.cartY0 = d.cartY;
+    if (d._waveAmp === undefined) {
+      d._waveAmp = 0.4 + Math.random() * 1.2;
+      d._waveFreq = 0.8 + Math.random() * 0.4;
+      d._waveOff = Math.random() * Math.PI * 2;
+      d._hoverScale = 1.0;
+    }
+    
+    d.ty = RADII[Math.min(d.depth, RADII.length - 1)] * spreadFactor;
+    d.tx = d.x;
+
+    if (d.y === undefined) {
+      if (source && source.y !== undefined) {
+        d.x = source.x;
+        d.y = source.y;
+      } else {
+        d.x = d.tx;
+        d.y = d.ty;
+      }
+    }
+
+    d.cartX0 = cx + d.ty * Math.cos(d.tx - Math.PI / 2);
+    d.cartY0 = cy + d.ty * Math.sin(d.tx - Math.PI / 2);
+    
+    if (d.cartX === undefined) {
+      d.cartX = cx + d.y * Math.cos(d.x - Math.PI / 2);
+      d.cartY = cy + d.y * Math.sin(d.x - Math.PI / 2);
+    }
+    
     d._col = bcolor(d);      
     d._r   = nodeR(d);       
   });
+  
   allNodes = nodes;
   allLinks = root.links();
   _sorted  = null;          
@@ -1082,7 +1101,7 @@ function project3D(nodes, maxR) {
     let zOff = 0;
     if (isWaveOn && hasAudioData) {
       const energy = depthFreqs[d.depth] || smoothedEnergy;
-      zOff = Math.sin(d.x * 6 + wavePhase) * (energy * 80); 
+      zOff = Math.sin(d.x * 2.5 + wavePhase * d._waveFreq + d._waveOff) * (energy * 100 * d._waveAmp); 
     }
     const lz = (1 - d.y / maxR) * bulge3d + zOff;
     
@@ -1113,7 +1132,7 @@ function projectPOV(nodes, maxR) {
     
     if (isWaveOn && hasAudioData) {
       const energy = depthFreqs[d.depth] || smoothedEnergy;
-      elev += Math.sin(d.x * 6 + wavePhase) * (energy * 0.3);
+      elev += Math.sin(d.x * 2.5 + wavePhase * d._waveFreq + d._waveOff) * (energy * 0.45 * d._waveAmp);
     }
     
     const wx = dist * Math.cos(elev) * Math.cos(az);
@@ -1262,7 +1281,7 @@ function renderCanvas() {
 
     const baseR = d._r * scale;
     const audioBump = (hasAudioData && depthFreqs[d.depth]) ? depthFreqs[d.depth] * 0.3 : 0;
-    const finalRadius = baseR * (1 + audioBump) * pulse;
+    const finalRadius = baseR * (1 + audioBump) * pulse * (d._hoverScale || 1.0);
     const screenR = finalRadius * k;               
     const nodeAlpha = is3DOn ? (d._op3 != null ? d._op3 : 1) : 1;
 
@@ -1345,7 +1364,7 @@ function renderCanvas() {
     }
 
     if (d === hoveredNode && !is8Bit) {
-      ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius * 1.2, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(d.cartX, d.cartY, finalRadius * 1.15, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
     }
 
@@ -1399,6 +1418,21 @@ d3.timer(elapsed => {
 
   if (isSpinOn && !is3DOn) mapAngle += spinSpeed * 0.2;
   if (isWaveOn) wavePhase += waveSpeed * 0.05;
+
+  allNodes.forEach(d => {
+    if (d.tx !== undefined && d.ty !== undefined) {
+      let diff = d.tx - d.x;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      d.x += diff * 0.15;
+      d.y += (d.ty - d.y) * 0.15;
+    }
+    if (d === hoveredNode) {
+      d._hoverScale = d._hoverScale ? d._hoverScale + (1.4 - d._hoverScale) * 0.2 : 1.4;
+    } else {
+      d._hoverScale = d._hoverScale ? d._hoverScale + (1.0 - d._hoverScale) * 0.2 : 1.0;
+    }
+  });
 
   hasAudioData = false;
   if (isAudioPlaying && analyser) {
@@ -1503,7 +1537,7 @@ d3.timer(elapsed => {
       if (!orbit3d) yaw3d += spin3dSpeed * 0.01;
       project3D(nodes, maxR);
     }
-  } else if ((isDiffSpinOn || isWaveOn) && !isFloatOn && root) {
+  } else if (!isFloatOn && root) {
     for (const d of allNodes) {
       if (d.data.ox != null) continue;
       const a = ringAz(d);
@@ -1511,7 +1545,7 @@ d3.timer(elapsed => {
       let wOff = 0;
       if (isWaveOn && hasAudioData) {
           const energy = depthFreqs[d.depth] || smoothedEnergy;
-          wOff = Math.sin(d.x * 6 + wavePhase) * (energy * 40); 
+          wOff = Math.sin(d.x * 2.5 + wavePhase * d._waveFreq + d._waveOff) * (energy * 60 * d._waveAmp); 
       }
       
       const rad = d.y + wOff;
