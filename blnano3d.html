@@ -294,6 +294,34 @@
 
   <div class="folder collapsed">
     <div class="folder-head" onclick="toggleFolder(this)">
+      <span class="folder-title">Controller Haptics</span><span class="chev">▾</span>
+    </div>
+    <div class="folder-body">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Rumble</span>
+        <button class="btn" id="hapticBtn" onclick="toggleHaptics()" style="padding:2px 6px;font-size:8px;">OFF</button>
+      </div>
+      <div id="hapticStatus" style="font-size:8px;color:rgba(255,255,255,0.3);font-family:monospace;letter-spacing:0.5px;text-align:center;margin-bottom:8px;line-height:1.5;">
+        No controller detected
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Intensity</span>
+        <span class="ctrl-val" id="hapticIntVal" style="color:#ff7a00;">0.80x</span>
+      </div>
+      <input type="range" id="hapticIntSlider" min="0" max="1.5" step="0.05" value="0.8"
+             oninput="setHapticIntensity(this.value)" style="opacity:0.8;margin-bottom:8px;accent-color:#ff7a00;">
+      <div class="ctrl-row">
+        <span class="ctrl-label" style="text-transform:none;font-size:10px;">Beat Kick</span>
+        <button class="btn" id="beatKickBtn" onclick="toggleBeatKick()" style="padding:2px 6px;font-size:8px;color:#ff7a00;border-color:#ff7a00;">ON</button>
+      </div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.25);font-family:monospace;letter-spacing:1px;text-align:center;">
+        BASS → RUMBLE · TREBLE → BUZZ · ONSET → KICK
+      </div>
+    </div>
+  </div>
+
+  <div class="folder collapsed">
+    <div class="folder-head" onclick="toggleFolder(this)">
       <span class="folder-title">Motion</span><span class="chev">▾</span>
     </div>
     <div class="folder-body">
@@ -483,6 +511,18 @@ let dataArray = null;
 let sourceNode = null;
 let currentStream = null;
 let isAudioPlaying = false;
+
+let hapticsOn       = false;
+let hapticPadIndex  = null;
+let hapticIntensity = 0.8;
+let beatKickOn      = true;
+let beatPunch       = 0;
+let hapticBass      = 0;
+let hapticTreble    = 0;
+let hapticEnvPrev   = 0;
+let hapticCooldown  = 0;
+let lastHapticEmit  = 0;
+let hapticSupported = false;
 
 const canvas = d3.select('#cv').append('canvas').attr('width', W).attr('height', H);
 const ctx = canvas.node().getContext('2d');
@@ -685,6 +725,7 @@ function stopAudio() {
   if (sourceNode) { if (sourceNode.stop) sourceNode.stop(); sourceNode.disconnect(); }
   if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   isAudioPlaying = false;
+  stopHaptics();
   document.getElementById('stopAudioBtn').style.display = 'none';
   document.getElementById('tabAudioBtn').style.display = 'block';
   document.querySelectorAll('.audio-control').forEach(el => el.style.display = 'none');
@@ -693,6 +734,136 @@ function stopAudio() {
 function updateVolume(val) {
   document.getElementById('volVal').textContent = Math.round(val * 100) + '%';
   if (gainNode) gainNode.gain.value = parseFloat(val);
+}
+
+/* ─────────────────────  CONTROLLER HAPTICS  ─────────────────────
+   Mirrors the node visuals: bass drives the big low-frequency motor
+   (the same energy that swells the rings/glow), treble drives the
+   buzzy motor, and audio onsets — the exact trigger that spawns the
+   center rings & shooting stars — fire a sharp rumble "kick".        */
+
+window.addEventListener('gamepadconnected', e => {
+  if (hapticPadIndex === null) hapticPadIndex = e.gamepad.index;
+  refreshHapticStatus();
+});
+window.addEventListener('gamepaddisconnected', e => {
+  if (e.gamepad.index === hapticPadIndex) hapticPadIndex = null;
+  refreshHapticStatus();
+});
+
+function getHapticPad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  if (hapticPadIndex !== null && pads[hapticPadIndex]) return pads[hapticPadIndex];
+  for (const p of pads) { if (p) { hapticPadIndex = p.index; return p; } }
+  return null;
+}
+
+function refreshHapticStatus() {
+  const el = document.getElementById('hapticStatus');
+  if (!el) return;
+  const pad = getHapticPad();
+  if (!pad) {
+    el.innerHTML = hapticsOn ? 'Waiting… press a button on your controller' : 'No controller detected';
+    el.style.color = hapticsOn ? '#ff7a00' : 'rgba(255,255,255,0.3)';
+    hapticSupported = false;
+    return;
+  }
+  hapticSupported = !!pad.vibrationActuator;
+  const name = (pad.id || 'Controller').replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 26);
+  if (hapticSupported) {
+    el.innerHTML = '🎮 ' + name + '<br>rumble ready';
+    el.style.color = '#00c9a7';
+  } else {
+    el.innerHTML = '🎮 ' + name + '<br>no rumble support';
+    el.style.color = 'rgba(255,170,0,0.75)';
+  }
+}
+
+function toggleHaptics() {
+  hapticsOn = !hapticsOn;
+  const btn = document.getElementById('hapticBtn');
+  if (hapticsOn) {
+    btn.textContent = 'ON'; btn.style.color = '#ff7a00'; btn.style.borderColor = '#ff7a00'; btn.style.boxShadow = '0 0 10px rgba(255,122,0,0.3)';
+    const pad = getHapticPad();
+    if (pad && pad.vibrationActuator) {
+      try { pad.vibrationActuator.playEffect('dual-rumble', { duration: 160, startDelay: 0, strongMagnitude: 0.5 * hapticIntensity, weakMagnitude: 0.3 * hapticIntensity }); } catch (e) {}
+    }
+  } else {
+    btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; btn.style.boxShadow = 'none';
+    stopHaptics();
+  }
+  refreshHapticStatus();
+}
+
+function setHapticIntensity(v) {
+  hapticIntensity = parseFloat(v);
+  document.getElementById('hapticIntVal').textContent = hapticIntensity.toFixed(2) + 'x';
+}
+
+function toggleBeatKick() {
+  beatKickOn = !beatKickOn;
+  const btn = document.getElementById('beatKickBtn');
+  if (beatKickOn) { btn.textContent = 'ON'; btn.style.color = '#ff7a00'; btn.style.borderColor = '#ff7a00'; }
+  else { btn.textContent = 'OFF'; btn.style.color = ''; btn.style.borderColor = ''; }
+}
+
+function stopHaptics() {
+  beatPunch = 0; hapticBass = 0; hapticTreble = 0;
+  const pad = getHapticPad();
+  if (pad && pad.vibrationActuator && pad.vibrationActuator.reset) {
+    try { pad.vibrationActuator.reset(); } catch (e) {}
+  }
+}
+
+function updateHaptics(elapsed) {
+  if (!hapticsOn || !dataArray) return;
+  const pad = getHapticPad();
+  if (!pad || !pad.vibrationActuator) return;
+
+  const n = dataArray.length;
+
+  // bass band — the low-frequency rumble (skip the DC bin)
+  let bSum = 0, bCount = 0;
+  const bEnd = Math.max(3, Math.floor(n * 0.08));
+  for (let i = 1; i < bEnd; i++) { bSum += dataArray[i]; bCount++; }
+  const bass = bCount ? (bSum / bCount) / 255 : 0;
+
+  // treble band — the buzzy motor
+  let tSum = 0, tCount = 0;
+  const tStart = Math.floor(n * 0.35), tEnd = Math.floor(n * 0.85);
+  for (let i = tStart; i < tEnd; i++) { tSum += dataArray[i]; tCount++; }
+  const treble = tCount ? (tSum / tCount) / 255 : 0;
+
+  hapticBass   += (bass   - hapticBass)   * 0.4;
+  hapticTreble += (treble - hapticTreble) * 0.4;
+
+  // onset detection — identical thresholds to the center-ring spawn
+  if (hapticCooldown > 0) hapticCooldown--;
+  if (beatKickOn && smoothedEnergy > 0.14 && smoothedEnergy > hapticEnvPrev * 1.15 && hapticCooldown <= 0) {
+    beatPunch = 1; hapticCooldown = 6;
+  }
+  hapticEnvPrev = smoothedEnergy;
+  beatPunch *= 0.82;
+
+  // map energy → the two rumble motors
+  let strong = Math.min(1, (hapticBass * 1.35 + beatPunch * 0.6) * hapticIntensity);
+  let weak   = Math.min(1, (hapticTreble * 1.1 + beatPunch * 0.5) * hapticIntensity * 0.8);
+  if (strong < 0.04) strong = 0;
+  if (weak   < 0.04) weak   = 0;
+
+  // fire kicks immediately; otherwise refresh continuous rumble on a throttle
+  const isBeat = beatPunch > 0.55;
+  if (isBeat || elapsed - lastHapticEmit > 70) {
+    lastHapticEmit = elapsed;
+    try {
+      pad.vibrationActuator.playEffect('dual-rumble', {
+        startDelay: 0,
+        duration: isBeat ? 90 : 120,   // overlaps the next refresh for a seamless feel
+        strongMagnitude: strong,
+        weakMagnitude: weak
+      });
+    } catch (e) {}
+  }
 }
 
 function toggleGlowMode() {
@@ -1444,6 +1615,8 @@ d3.timer(elapsed => {
     audioLevel += (rawLevel - audioLevel) * 0.3;
     smoothedEnergy += (Math.min(1, rawLevel) - smoothedEnergy) * 0.3;
 
+    updateHaptics(elapsed);
+
     if (isDiffSpinOn) ringPhase += diffSpinSpeed * 0.004 * (0.25 + audioLevel * 1.6);
     if (isSpectrumOn) {
       if (!specSmooth || specSmooth.length !== dataArray.length) specSmooth = new Float32Array(dataArray.length);
@@ -1609,6 +1782,7 @@ async function fetchData() {
   } catch (err) { alert('Error parsing database data. Check the console for details.'); console.error(err); }
 }
 
+refreshHapticStatus();
 fetchData();
 </script>
 </body>
